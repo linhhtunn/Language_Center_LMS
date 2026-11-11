@@ -8,15 +8,13 @@ import {
   calculateScoreDistribution,
   emptyAttendanceRate,
   emptyScoreDistribution,
-  fallbackAttendanceRate,
-  fallbackScoreDistribution,
   notDeleted,
   scoresForClasses,
   type AttendanceRateDto,
   type ClassSizeDto,
   type ScoreDistributionDto,
 } from './reports.common.js';
-import { average, csvQuote, dotnetRound, fmtDouble, NL, seededInt } from './reports.dotnet.js';
+import { average, csvQuote, dotnetRound, fmtDouble, NL } from './reports.dotnet.js';
 
 // Bao cao tong quan Admin / Giao vien va file CSV tuong ung (ReportsService.cs).
 
@@ -64,37 +62,21 @@ async function fillBaseOverviewReport(report: BaseOverviewReportDto, limitClassI
     });
     report.totalStudents = students.length;
 
-    const estimatedAttendance = Math.max(60, report.totalStudents * 10);
-    const estimatedScores = Math.max(40, report.totalStudents * 4);
-    const seedTag = `teacher-${limitClassIds.length}`;
-
-    report.attendanceRate = calculateAttendanceRate(await attendanceCodesForClasses(limitClassIds), seedTag, estimatedAttendance);
-    report.scoreDistribution = calculateScoreDistribution(await scoresForClasses(limitClassIds), seedTag, estimatedScores);
+    report.attendanceRate = calculateAttendanceRate(await attendanceCodesForClasses(limitClassIds));
+    report.scoreDistribution = calculateScoreDistribution(await scoresForClasses(limitClassIds));
     report.classSizes = await classSizes({ MaLopHoc: { in: limitClassIds }, ...notDeleted });
   } else {
     report.totalClasses = await prisma.lophoc.count({ where: notDeleted });
     report.totalStudents = await prisma.hocsinh.count({ where: notDeleted });
 
-    const estimatedAttendance = Math.max(120, report.totalStudents * Math.max(1, report.totalClasses) * 6);
-    const estimatedScores = Math.max(80, report.totalStudents * 5);
-    const seedTag = 'admin-overview';
-
     const att = await prisma.diemdanh.findMany({
       where: notDeleted,
       select: { chitietdanhmuc: { select: { MaCode: true } } },
     });
-    report.attendanceRate = calculateAttendanceRate(
-      att.map((r) => r.chitietdanhmuc?.MaCode ?? null),
-      seedTag,
-      estimatedAttendance,
-    );
+    report.attendanceRate = calculateAttendanceRate(att.map((r) => r.chitietdanhmuc?.MaCode ?? null));
 
     const scores = await prisma.nopbai.findMany({ where: { ...notDeleted, DiemSo: { not: null } }, select: { DiemSo: true } });
-    report.scoreDistribution = calculateScoreDistribution(
-      scores.map((s) => s.DiemSo!.toNumber()),
-      seedTag,
-      estimatedScores,
-    );
+    report.scoreDistribution = calculateScoreDistribution(scores.map((s) => s.DiemSo!.toNumber()));
 
     report.classSizes = await classSizes(notDeleted);
   }
@@ -110,37 +92,8 @@ export async function getAdminOverview(): Promise<AdminOverviewReportDto> {
     ...base,
   };
 
-  const isEmptySystem =
-    report.totalStudents === 0 &&
-    report.totalClasses === 0 &&
-    report.totalTeachers === 0 &&
-    report.totalCourses === 0 &&
-    report.classSizes.length === 0;
-  if (isEmptySystem) {
-    report.totalStudents = 1048;
-    report.totalClasses = 24;
-    report.totalTeachers = 12;
-    report.totalCourses = 10;
-    report.attendanceRate = fallbackAttendanceRate(14000, 'empty-universe');
-    report.scoreDistribution = fallbackScoreDistribution(5200, 'empty-universe');
-    const year = new Date().getFullYear();
-    for (let i = 1; i <= 24; i++) {
-      const cls = `LH_ENSEED_${String(i).padStart(2, '0')}`;
-      // Ban goc dung chung seed "cls-gsize" cho moi lop nen si so 24 lop nhu nhau (giu nguyen).
-      const size = seededInt('cls-gsize', 22, 42);
-      const cap = seededInt(`${cls}-capacity`, 30, 45);
-      report.classSizes.push({ className: `${cls}_${year}`, studentCount: size, capacity: cap });
-    }
-  } else if (report.classSizes.length === 0 && report.totalClasses > 0) {
-    for (let i = 1; i <= report.totalClasses; i++) {
-      const key = `fallback-size-${i}`;
-      report.classSizes.push({
-        className: `Lớp ${i}`,
-        studentCount: seededInt(key, 20, 40),
-        capacity: seededInt(`${key}-cap`, 30, 45),
-      });
-    }
-  }
+  // Ban .NET: he thong rong -> BIA 1048 HS / 24 lop / 12 GV / 10 khoa + chuyen can, pho diem, si so lop mau;
+  // co lop nhung classSizes rong -> bia si so "Lop 1..n". Ban Node tra dung so thuc (0 / mang rong).
   return report;
 }
 

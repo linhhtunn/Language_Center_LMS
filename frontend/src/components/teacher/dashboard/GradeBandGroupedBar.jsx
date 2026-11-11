@@ -2,7 +2,7 @@ import React from "react";
 import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, registerables } from "chart.js";
 import { SCORE_BUCKETS } from "../../../constants/statsConstants";
-import { wrapChartAxisLabel } from "../../../utils/statsSeeder";
+import { wrapChartAxisLabel } from "../../../utils/statsUtils";
 import { getSeriesColor } from "../../../constants/teacherDashboardTheme";
 
 ChartJS.register(...registerables);

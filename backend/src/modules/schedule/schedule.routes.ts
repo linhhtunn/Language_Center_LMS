@@ -128,7 +128,8 @@ router.get(`${BASE}/teacher-board`, requireAuth, handle(async (req, res) => {
   }
 }));
 
-router.put(`${BASE}/reschedule-requests/:id/approve`, guidRoute('id'), requireAuth, handle(async (req, res) => {
+// Ban .NET khong kiem tra quyen duyet/tu choi (ai dang nhap cung goi duoc) -> Node yeu cau SCHEDULE_CHANGE_REQUEST_ADMIN.
+router.put(`${BASE}/reschedule-requests/:id/approve`, guidRoute('id'), ...requirePermission('SCHEDULE_CHANGE_REQUEST_ADMIN'), handle(async (req, res) => {
   const id = String(req.params.id);
   if (!isGuid(id)) return res.status(404).end();
   const result = await changeRequests.approveRequest(id.toLowerCase(), null);
@@ -141,7 +142,7 @@ router.put(`${BASE}/reschedule-requests/:id/approve`, guidRoute('id'), requireAu
   res.json({ message: result.message, id: result.maYeuCau });
 }));
 
-router.put(`${BASE}/reschedule-requests/:id/reject`, guidRoute('id'), requireAuth, handle(async (req, res) => {
+router.put(`${BASE}/reschedule-requests/:id/reject`, guidRoute('id'), ...requirePermission('SCHEDULE_CHANGE_REQUEST_ADMIN'), handle(async (req, res) => {
   const id = String(req.params.id);
   if (!isGuid(id)) return res.status(404).end();
   const result = await changeRequests.rejectRequest(id.toLowerCase(), null);

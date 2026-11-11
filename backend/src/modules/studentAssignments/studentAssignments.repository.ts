@@ -188,6 +188,8 @@ export interface SubmissionDetailRow {
   DapAnHocVien: string | null;
   DiemDatDuoc: Prisma.Decimal | null;
   DanhDauXemLai: boolean | null;
+  /** CHAM_CHO_CHAM / CHAM_DA_CHAM (chitietdanhmuc). */
+  TrangThaiChamTay: number | null;
 }
 
 /** Bai nop gan nhat, kem chi tiet tung cau. */
@@ -197,14 +199,15 @@ export async function getLatestSubmission(eventId: string, studentId: string) {
   });
   if (rows.length === 0) return null;
   const submission = [...rows].sort(byLatest)[0];
-  const raw = await prisma.$queryRaw<{ MaCauHoi: string; DapAnHocVien: string | null; DiemDatDuoc: Prisma.Decimal | null; DanhDauXemLai: unknown }[]>`
-    SELECT MaCauHoi, CAST(DapAnHocVien AS CHAR) AS DapAnHocVien, DiemDatDuoc, DanhDauXemLai
+  const raw = await prisma.$queryRaw<{ MaCauHoi: string; DapAnHocVien: string | null; DiemDatDuoc: Prisma.Decimal | null; DanhDauXemLai: unknown; TrangThaiChamTay: unknown }[]>`
+    SELECT MaCauHoi, CAST(DapAnHocVien AS CHAR) AS DapAnHocVien, DiemDatDuoc, DanhDauXemLai, TrangThaiChamTay
     FROM chitietnopbai WHERE MaNopBai = ${submission.MaNopBai}`;
   const chitiet: SubmissionDetailRow[] = raw.map((r) => ({
     MaCauHoi: r.MaCauHoi,
     DapAnHocVien: r.DapAnHocVien,
     DiemDatDuoc: r.DiemDatDuoc == null ? null : new Prisma.Decimal(r.DiemDatDuoc.toString()),
     DanhDauXemLai: r.DanhDauXemLai == null ? null : Boolean(Number(r.DanhDauXemLai)),
+    TrangThaiChamTay: r.TrangThaiChamTay == null ? null : Number(r.TrangThaiChamTay),
   }));
   return { ...submission, chitiet };
 }

@@ -1,34 +1,9 @@
-import {
-  DEMO_COURSE_NAMES,
-  DEMO_STUDENT_NAMES,
-  DEMO_TEACHER_NAMES,
-  SCORE_BUCKETS,
-  DATE_PRESETS,
-} from "../constants/statsConstants";
+import { SCORE_BUCKETS, DATE_PRESETS } from "../constants/statsConstants";
 
-export {
-  DEMO_COURSE_NAMES,
-  DEMO_STUDENT_NAMES,
-  DEMO_TEACHER_NAMES,
-  SCORE_BUCKETS,
-  DATE_PRESETS,
-};
+// Các hàm tiện ích cho màn thống kê: khoảng ngày, chuẩn hoá dữ liệu API,
+// phân nhóm điểm, cấu hình biểu đồ. Không sinh dữ liệu giả.
 
-export const hashSeed = (value = "") => {
-  const text = String(value);
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) % 2147483647;
-  }
-  return Math.abs(hash);
-};
-
-export const seededNumber = (seed, min, max, decimals = 0) => {
-  const hashed = hashSeed(seed);
-  const ratio = (hashed % 10000) / 10000;
-  const raw = min + (max - min) * ratio;
-  return Number(raw.toFixed(decimals));
-};
+export { SCORE_BUCKETS, DATE_PRESETS };
 
 export const formatPercent = (value) => `${Number(value || 0).toFixed(1)}%`;
 
@@ -190,42 +165,17 @@ export const unwrapApiData = (result) => {
   return result?.data ?? result ?? [];
 };
 
-export const buildDemoRosterForClass = (classId, desiredSize) => {
-  const size = Math.max(12, Math.min(Number(desiredSize) || 20, 34));
-  return Array.from({ length: size }, (_, index) => {
-    const seed = `${classId}-${index}`;
-    const nameIndex =
-      (hashSeed(seed) + index * 7) % Math.max(1, DEMO_STUDENT_NAMES.length);
-    const fullName = DEMO_STUDENT_NAMES[nameIndex] || `Học viên ${index + 1}`;
-    return {
-      studentId: `demo-${classId}-${index}`,
-      fullName,
-      email: `student.${hashSeed(seed) % 9999}@demo.edu.vn`,
-    };
-  });
-};
-
-export const buildTeacherDemoEmail = (teacherName = "") => {
-  const parts = String(teacherName).trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) {
-    return "teacher@edu.vn";
-  }
-  const firstName = parts[0].toLowerCase();
-  const lastName = parts[parts.length - 1].toLowerCase();
-  return `${lastName}.${firstName}@edu.vn`;
-};
-
-export const normalizeClass = (cls, index) => {
+export const normalizeClass = (cls) => {
   const courseLabel =
     cls.courses?.map((course) => course.name).join(", ") ||
-    DEMO_COURSE_NAMES[(index ?? 0) % DEMO_COURSE_NAMES.length];
+    "Chưa gán khóa học";
   const teacherLabel =
     cls.teachers?.map((teacher) => teacher.name).join(", ") || "Chưa phân công";
   return {
     ...cls,
     courseLabel,
     teacherLabel,
-    currentSize: cls.currentSize ?? seededNumber(`${cls.id}-size`, 14, 28, 0),
+    currentSize: cls.currentSize ?? 0,
   };
 };
 
@@ -554,219 +504,4 @@ export const computeSessionStatus = ({ startAt, endAt }, now = new Date()) => {
     label: "Đã kết thúc",
     badgeClass: "bg-light text-secondary border",
   };
-};
-
-export const buildDemoRosterForClassV2 = (classId, expectedSize) => {
-  const count = Math.max(8, Math.min(28, expectedSize || 18));
-  const seedBase = hashSeed(classId);
-  const joinedAt = toInputDate(startOfWeek(new Date()));
-
-  return Array.from({ length: count }, (_, index) => {
-    const nameIndex = (seedBase + index) % DEMO_STUDENT_NAMES.length;
-    const fullName = DEMO_STUDENT_NAMES[nameIndex];
-    const studentId = `demo-student-${seedBase}-${index}`;
-    const userId = `demo-user-${seedBase}-${index}`;
-    return {
-      studentId,
-      userId,
-      fullName,
-      email: `hs${String(nameIndex + 1).padStart(2, "0")}@demo.edu.vn`,
-      joinedAt,
-      active: true,
-    };
-  });
-};
-
-export const buildDemoUniverse = (now = new Date()) => {
-  const courses = DEMO_COURSE_NAMES.map((name, index) => ({
-    id: `demo-course-${index}`,
-    name,
-    description: "Dữ liệu mẫu trực quan",
-    basePrice: 0,
-    active: true,
-  }));
-
-  const teachers = DEMO_TEACHER_NAMES.map((name, index) => ({
-    id: `demo-teacher-${index}`,
-    name,
-  }));
-
-  const baseDate = startOfDay(now);
-  const classTemplates = [
-    {
-      offsetStart: -15,
-      offsetEnd: 45,
-      courseIndex: 0,
-      teacherIndex: 0,
-      name: "IELTS-55-01",
-    },
-    {
-      offsetStart: -3,
-      offsetEnd: 28,
-      courseIndex: 1,
-      teacherIndex: 1,
-      name: "IELTS-65-02",
-    },
-    {
-      offsetStart: 3,
-      offsetEnd: 60,
-      courseIndex: 2,
-      teacherIndex: 2,
-      name: "TOEIC-450-A",
-    },
-    {
-      offsetStart: 7,
-      offsetEnd: 75,
-      courseIndex: 3,
-      teacherIndex: 3,
-      name: "TOEIC-650-B",
-    },
-    {
-      offsetStart: -40,
-      offsetEnd: -5,
-      courseIndex: 4,
-      teacherIndex: 4,
-      name: "A2-K12-MonWed",
-    },
-    {
-      offsetStart: -20,
-      offsetEnd: 10,
-      courseIndex: 5,
-      teacherIndex: 5,
-      name: "Speaking-Club-03",
-    },
-    {
-      offsetStart: 14,
-      offsetEnd: 90,
-      courseIndex: 0,
-      teacherIndex: 1,
-      name: "IELTS-55-04",
-    },
-    {
-      offsetStart: -8,
-      offsetEnd: 20,
-      courseIndex: 4,
-      teacherIndex: 2,
-      name: "A2-Weekend-01",
-    },
-    {
-      offsetStart: -12,
-      offsetEnd: 35,
-      courseIndex: 1,
-      teacherIndex: 6,
-      name: "IELTS-Foundation-02",
-    },
-    {
-      offsetStart: 5,
-      offsetEnd: 55,
-      courseIndex: 2,
-      teacherIndex: 7,
-      name: "TOEIC-Bridge-01",
-    },
-    {
-      offsetStart: -6,
-      offsetEnd: 42,
-      courseIndex: 3,
-      teacherIndex: 8,
-      name: "TOEIC-Intensive-03",
-    },
-    {
-      offsetStart: 10,
-      offsetEnd: 70,
-      courseIndex: 5,
-      teacherIndex: 9,
-      name: "Speaking-Pro-02",
-    },
-  ];
-
-  const classes = classTemplates.map((item, index) => {
-    const id = `demo-class-${index}`;
-    const currentSize = Math.max(
-      10,
-      Math.round(seededNumber(`${id}-size`, 12, 28, 0)),
-    );
-    const capacity = Math.max(
-      currentSize + 2,
-      Math.round(seededNumber(`${id}-cap`, 20, 32, 0)),
-    );
-    return {
-      id,
-      name: item.name,
-      startDate: toInputDate(addDays(baseDate, item.offsetStart)),
-      endDate: toInputDate(addDays(baseDate, item.offsetEnd)),
-      currentSize,
-      capacity,
-      active: true,
-      courses: [courses[item.courseIndex]],
-      teachers: [teachers[item.teacherIndex]],
-    };
-  });
-
-  const studentsByClass = {};
-  classes.forEach((cls) => {
-    studentsByClass[cls.id] = buildDemoRosterForClassV2(
-      cls.id,
-      cls.currentSize,
-    );
-  });
-
-  const classSizes = classes.map((cls) => ({
-    className: cls.name,
-    studentCount: cls.currentSize,
-    capacity: cls.capacity,
-  }));
-
-  return {
-    courses,
-    classes,
-    studentsByClass,
-    report: {
-      totalStudents: 1286,
-      totalTeachers: teachers.length,
-      totalClasses: classes.length,
-      totalCourses: courses.length,
-      attendanceRate: {
-        present: 9240,
-        late: 820,
-        absent: 420,
-        excused: 180,
-        total: 10660,
-      },
-      scoreDistribution: {
-        under5: 42,
-        from5To7: 318,
-        from7To85: 592,
-        above85: 334,
-        total: 1286,
-        averageScore: 7.8,
-      },
-      classSizes,
-    },
-  };
-};
-
-export const buildDemoTodaySchedule = (classes, today = new Date()) => {
-  const rooms = ["P205", "P401", "P201", "P304", "P101", "P402"];
-  const slots = [
-    { start: 7, end: 8 },
-    { start: 11, end: 12 },
-    { start: 1, end: 2 },
-    { start: 3, end: 4 },
-  ];
-
-  return classes.slice(0, 6).map((cls, index) => {
-    const slot = slots[index % slots.length];
-    const startTime = SCHEDULE_SLOTS[slot.start]?.start;
-    const endTime = SCHEDULE_SLOTS[slot.end]?.end;
-    return {
-      id: `demo-session-${cls.id}-${index}`,
-      className: cls.name,
-      courseName: cls.courses?.[0]?.name || "Chưa gán khóa",
-      teacherName: cls.teachers?.[0]?.name || "Chưa phân công",
-      room: rooms[index % rooms.length],
-      startAt: parseClock(today, startTime),
-      endAt: parseClock(today, endTime),
-      timeLabel: `${startTime || "--:--"} - ${endTime || "--:--"}`,
-    };
-  });
 };

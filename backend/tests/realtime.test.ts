@@ -165,4 +165,32 @@ describe('/notification (NotificationHub)', () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(studentGot).toBe(false);
   });
+
+  it('POST /api/Notification -> nguoi nhan nhan "NewNotification" ngay (ban .NET khong bao gio day)', async () => {
+    const admin = await login('admin');
+    const student = await login('student');
+    const teacher = await login('teacher');
+    const st = connect('/notification', student.token);
+    const tc = connect('/notification', teacher.token);
+    await Promise.all([connected(st), connected(tc)]);
+    let teacherGot = false;
+    tc.on('NewNotification', () => (teacherGot = true));
+    const p = nextEvent<{ id: string; title: string; isRead: boolean; doiTuong: string }>(st, 'NewNotification');
+
+    const title = `TEST_MSG_realtime ${Date.now()}`;
+    const res = await request(app)
+      .post('/api/Notification')
+      .set({ Authorization: `Bearer ${admin.token}` })
+      .field('Title', title)
+      .field('Content', 'Nghi hoc chieu nay')
+      .field('DoiTuong', 'Hoc_Sinh');
+    expect(res.status).toBe(200);
+    const got = await p;
+    expect(got).toMatchObject({ id: res.body.data.id, title, isRead: false, doiTuong: 'Hoc_Sinh' });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(teacherGot).toBe(false); // thong bao cho hoc sinh khong toi giao vien
+
+    await prisma.nguoinhanthongbao.deleteMany({ where: { MaThongBao: got.id } });
+    await prisma.thongbao.delete({ where: { MaThongBao: got.id } });
+  });
 });

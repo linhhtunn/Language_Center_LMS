@@ -5,6 +5,7 @@ import NotificationPanel from "../../components/NotificationPanel";
 import BaseApi from "../../api/BaseApi";
 import "../../styles/notification-badge.css";
 import "../../styles/notification-panel.css"; // Import notification panel styles
+import { onNewNotification } from '../../components/RealtimeNotifications';
 
 const StudentDashboard = () => {
     const { user } = useAuth();
@@ -17,6 +18,11 @@ const StudentDashboard = () => {
         fetchUnreadCount();
         fetchWeeklySessionCount();
     }, [user]);
+
+    // Thong bao moi (realtime) -> cap nhat so chua doc tren chuong ngay, khong can tai lai trang.
+
+    useEffect(() => onNewNotification(() => fetchUnreadCount()), []);
+
 
     const fetchUnreadCount = async () => {
         try {

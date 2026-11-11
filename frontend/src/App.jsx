@@ -6,6 +6,7 @@ import { TestProvider } from './context/TestContext';
 import PrivateRoute from './routes/PrivateRoute';
 import MainLayout from './components/MainLayout';
 import { Toaster } from 'react-hot-toast';
+import RealtimeNotifications from './components/RealtimeNotifications';
 import Unauthorized from './components/Unauthorized';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -96,6 +97,7 @@ function App() {
       <StudentClassProvider>
         <TestProvider>
           <Toaster position="top-right" />
+          <RealtimeNotifications />
           <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Suspense fallback={<RouteLoadingFallback />}>
               <Routes>

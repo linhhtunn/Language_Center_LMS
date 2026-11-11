@@ -41,8 +41,11 @@ import type { AssignmentUpsertRequest } from './dtos.js';
 
 const lc = (s: string) => s.toLowerCase();
 
-/** Xem upsertAssignment: tai hien loi EF cua ban .NET khi sua bai them cau hoi / lop moi. */
-export const EMULATE_EF_NAVIGATION_ADD_BUG = true;
+/**
+ * Ban .NET loi khi SUA bai co them cau hoi / lop moi (EF sinh UPDATE thay vi INSERT -> 500, khong luu).
+ * Ban Node da SUA loi nay (false). Dat true chi khi can tai hien hanh vi cu de doi chieu.
+ */
+export const EMULATE_EF_NAVIGATION_ADD_BUG = false;
 
 function computeStatusKey(
   publishMode: string | null,
@@ -310,9 +313,15 @@ export async function getAssignments(filters: {
     and.push({ LoaiBaiTap: { in: await categoryIdsByCode(prisma, filters.assignmentType!) } });
   }
   if (!isNullOrWhiteSpace(filters.search)) {
-    // .NET: `x.MoTa.Contains(keyword)` tren cot json bi Pomelo dich thanh CAST(... AS json) va MySQL
-    // bao "Invalid JSON text in argument 1 to function cast_as_json" -> tim kiem luon tra 500.
-    throw new Error('Invalid JSON text in argument 1 to function cast_as_json: "Invalid value." at position 0.');
+    // Ban .NET: `TenBaiTap.Contains(kw) || MoTa.Contains(kw)` - Pomelo dich MoTa (cot json) thanh
+    // CAST(... AS json) nen MySQL bao loi va tim kiem LUON tra 500. Ban Node tim dung y do:
+    // ten bai hoac noi dung mo ta (doi JSON ra chuoi), khong phan biet hoa thuong / dau.
+    const pattern = `%${filters.search!.trim().replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+    const hits = await prisma.$queryRaw<{ MaBaiTap: string }[]>`
+      SELECT MaBaiTap FROM baitap
+      WHERE TenBaiTap LIKE ${pattern}
+         OR (MoTa IS NOT NULL AND CAST(MoTa AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ${pattern})`;
+    and.push({ MaBaiTap: { in: hits.map((h) => h.MaBaiTap) } });
   }
   const rows = await prisma.baitap.findMany({ where: { AND: and }, select: { MaBaiTap: true, ThoiGianSua: true, ThoiGianTao: true } });
   const key = (x: (typeof rows)[number]) => (x.ThoiGianSua ?? x.ThoiGianTao)?.getTime() ?? -8.64e15;

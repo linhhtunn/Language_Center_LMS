@@ -8,11 +8,8 @@ import { prisma } from '../src/db.js';
 import {
   dotnetRound,
   fmtF1,
-  hashSeed,
   parseGuid,
   roundHalfEven,
-  seededInt,
-  seededNumber,
 } from '../src/modules/reports/reports.dotnet.js';
 
 // Test module Reports (ReportsController.cs). Tao bo du lieu rieng tien to TEST_REPORT_ (lop, HS, GV, PH,
@@ -445,14 +442,6 @@ describe('ham mo phong .NET', () => {
     expect(dotnetRound(85.71428571, 2)).toBe(85.71);
   });
 
-  it('System.Random(seed) + MD5 seed khop so lieu ban .NET', () => {
-    expect(hashSeed('')).toBe(0);
-    // So lieu lay tu /api/Reports/admin/overview cua ban .NET khi DB trong.
-    expect(dotnetRound(120 * seededNumber('fallback-att-present-admin-overview', 0.82, 0.9, 4))).toBe(103);
-    expect(seededNumber('fallback-score-avg-admin-overview', 7, 8, 2)).toBe(7.33);
-    expect(seededInt('fb-teacher-0-phone', 0, 89999999) + 10000000).toBe(31784331);
-  });
-
   it('Guid.TryParse: dang D/N/B, sai -> null', () => {
     expect(parseGuid('11111111111111111111111111111111')).toBe('11111111-1111-1111-1111-111111111111');
     expect(parseGuid('{AAAAAAAA-1111-1111-1111-111111111111}')).toBe('aaaaaaaa-1111-1111-1111-111111111111');
@@ -486,6 +475,40 @@ describe('quyen + dau vao', () => {
     expect(JSON.parse(d.text).message).toBe('Lỗi: Không tìm thấy lớp học.');
   });
 
+  it('class/{id}/dashboard: chi admin hoac GV day lop (ban .NET: ai dang nhap cung xem duoc)', async () => {
+    const A = ids.classes.A;
+    expect((await callNode(`/api/Reports/class/${A}/dashboard`, 'admin')).status).toBe(200);
+    expect((await callNode(`/api/Reports/class/${A}/dashboard`, 'teacher')).status).toBe(200);
+    for (const role of ['student', 'parent'] as const) {
+      const r = await callNode(`/api/Reports/class/${A}/dashboard`, role);
+      expect(r.status).toBe(403);
+      expect(JSON.parse(r.text)).toEqual({ message: 'Bạn không có quyền truy cập tài nguyên này.', statusCode: 403 });
+    }
+    expect((await callNode(`/api/Reports/class/${randomUUID()}/dashboard`, 'teacher')).status).toBe(403);
+  }, 60_000);
+
+  it('student/dashboard: HS chi xem minh, PH chi xem con, GV chi xem HS lop minh day', async () => {
+    const [s0, s1, s2, s3] = ids.students;
+    const A = ids.classes.A;
+    const demo = await prisma.hocsinh.findFirstOrThrow({ where: { nguoidung: { Email: 'hocsinh@qltt.local' } } });
+    const st = async (role: Role, q: string) => (await callNode(`/api/Reports/student/dashboard?${q}`, role)).status;
+
+    expect(await st('student', `classId=${A}`)).toBe(200); // khong truyen studentId -> chinh minh
+    expect(await st('student', `classId=${A}&studentId=${s0}`)).toBe(200);
+    expect(await st('student', `classId=${A}&studentId=${s1}`)).toBe(403);
+
+    expect(await st('parent', `classId=${A}&studentId=${s1}`)).toBe(200);
+    expect(await st('parent', `classId=${A}&studentId=${s2}`)).toBe(403); // lien ket phu huynh da xoa
+    expect(await st('parent', `classId=${A}&studentId=${s3}`)).toBe(403);
+
+    expect(await st('teacher', `classId=${A}&studentId=${s3}`)).toBe(200);
+    expect(await st('teacher', `studentId=${s3}`)).toBe(200);
+    expect(await st('teacher', `classId=${A}&studentId=${demo.MaHocSinh}`)).toBe(403);
+    expect(await st('teacher', `studentId=${demo.MaHocSinh}`)).toBe(403);
+
+    expect(await st('admin', `classId=${A}&studentId=${s1}`)).toBe(200);
+  }, 60_000);
+
   it('student/dashboard: classId sai -> 400 ValidationProblem', async () => {
     const r = await callNode('/api/Reports/student/dashboard?classId=abc', 'student');
     expect(r.status).toBe(400);
@@ -494,6 +517,62 @@ describe('quyen + dau vao', () => {
 });
 
 describe('so lieu Node (khong can .NET)', () => {
+  it('admin/student-performance: diem/chuyen can THAT, lan nop moi nhat, chua co du lieu -> null', async () => {
+    const r = await callNode('/api/Reports/admin/student-performance', 'admin');
+    expect(r.status).toBe(200);
+    const d = JSON.parse(r.text).data;
+    const [s0, s1, s2, s3, s4, s5, s6] = ids.students;
+    const rowsA = d.performanceRows.filter((x: { classId: string }) => x.classId === ids.classes.A);
+    const pick = (sid: string) => rowsA.find((x: { studentId: string }) => x.studentId === sid);
+    // s5 (TrangThai=false) va s6 (DaXoa) khong con trong lop
+    expect(pick(s5)).toBeUndefined();
+    expect(pick(s6)).toBeUndefined();
+    // s0: e1 lay lan nop moi nhat 9.25 (bo 8.5), e2 6.5, e3 9.5, e4 2.0 -> 6.8125 -> 6.8; e6 da xoa khong tinh.
+    // Diem danh: b1 co mat, b2 tre, b3 vang (b4 thuoc buoi da xoa) -> 3 buoi, vang 1 -> 33.3%
+    expect(pick(s0)).toMatchObject({ score: 6.8, totalSessions: 3, absenceCount: 1, absenceRate: 33.3, classSize: 5 });
+    expect(pick(s1)).toMatchObject({ score: 7.5, totalSessions: 3, absenceCount: 0, absenceRate: 0 });
+    expect(pick(s2)).toMatchObject({ score: 3.8, totalSessions: 2, absenceCount: 1, absenceRate: 50 });
+    expect(pick(s3)).toMatchObject({ score: 7.2, totalSessions: 1, absenceCount: 0 }); // bai nop khong diem + bai da xoa bi bo
+    expect(pick(s4)).toMatchObject({ score: 0.1, totalSessions: 0, absenceCount: 0, absenceRate: null });
+    expect(rowsA.map((x: { studentId: string; rank: number | null }) => [x.studentId, x.rank])).toEqual([
+      [s1, 1], [s3, 2], [s0, 3], [s2, 4], [s4, 5],
+    ]);
+    // Lop B: s1 chua co bai cham -> score null, rank null, xep cuoi
+    const rowsB = d.performanceRows.filter((x: { classId: string }) => x.classId === ids.classes.B);
+    expect(rowsB.at(-1)).toMatchObject({ studentId: s1, score: null, rank: null, totalSessions: 1, absenceCount: 1, absenceRate: 100 });
+    // Top hoc vien chi gom HS co diem
+    expect(d.topLearners.every((t: { averageScore: number }) => typeof t.averageScore === 'number')).toBe(true);
+  }, 60_000);
+
+  it('admin/teacher-dashboard: chi GV that, khong lop/diem/email gia', async () => {
+    const r = await callNode('/api/Reports/admin/teacher-dashboard', 'admin');
+    expect(r.status).toBe(200);
+    const d = JSON.parse(r.text).data;
+    expect(d.usesFallback).toBe(false);
+    expect(d.summary.totalTeachers).toBe(await prisma.giangvien.count({ where: { OR: [{ DaXoa: false }, { DaXoa: null }] } }));
+    expect(d.teachers.length).toBe(d.summary.totalTeachers);
+    for (const t of d.teachers) {
+      expect(t.email).not.toMatch(/^gv_(demo_)?[0-9a-f]{3,6}.*@qltt\.local$/);
+      for (const c of t.classes) expect(c.className).not.toMatch(/^LH_(TEMP|ENSEED)_/);
+      if (t.classes.length === 0) expect([t.avgScore, t.avgAttendanceRate]).toEqual([null, null]);
+    }
+    const g0 = d.teachers.find((t: { name: string }) => t.name === 'TEST_REPORT_GV 00 Chính');
+    expect(g0.classCount).toBe(3); // A, B, C (lop D da xoa)
+    expect(typeof g0.avgScore).toBe('number');
+    expect(typeof g0.avgAttendanceRate).toBe('number');
+  }, 60_000);
+
+  it('khong co du lieu -> so 0 (ban .NET bia so mau)', async () => {
+    const { calculateAttendanceRate, calculateScoreDistribution } = await import('../src/modules/reports/reports.common.js');
+    expect(calculateAttendanceRate([])).toEqual({ present: 0, absent: 0, late: 0, excused: 0, total: 0, presentPercent: 0 });
+    expect(calculateScoreDistribution([])).toEqual({ under5: 0, from5To7: 0, from7To85: 0, above85: 0, total: 0, averageScore: 0 });
+    const t = await callNode(`/api/Reports/teacher/classes/${ids.classes.C}/overview`, 'teacher');
+    expect(t.status).toBe(200); // lop C: khong co diem danh / bai nop -> 0, khong bia
+    const c = JSON.parse(t.text).data;
+    expect(c.attendanceRate.total).toBe(0);
+    expect(c.scoreDistribution.total).toBe(0);
+  });
+
   it('teacher/classes/{A}/overview tinh dung', async () => {
     const r = await callNode(`/api/Reports/teacher/classes/${ids.classes.A}/overview`, 'teacher');
     expect(r.status).toBe(200);
@@ -523,7 +602,9 @@ describe.runIf(process.env.SKIP_DOTNET_PARITY !== '1')('parity voi backend .NET 
     return dotnetUp;
   };
 
-  it('truoc khi tao du lieu: admin/teacher-dashboard, overview, student-performance', () => {
+  // admin/teacher-dashboard, admin/student-performance va overview khi DB trong: ban .NET BIA so lieu,
+  // ban Node tra so that -> co y khac, khong so parity cac truong hop do.
+  it.skip('truoc khi tao du lieu: admin/teacher-dashboard, overview, student-performance', () => {
     if (!guard()) return;
     for (const { node, net } of preSeed) {
       expect(node.status).toBe(net.status);
@@ -536,12 +617,7 @@ describe.runIf(process.env.SKIP_DOTNET_PARITY !== '1')('parity voi backend .NET 
   it('GET admin/export (CSV)', async () => {
     if (guard()) await parity('/api/Reports/admin/export', 'admin');
   });
-  it('GET admin/student-performance', async () => {
-    if (guard()) await parity('/api/Reports/admin/student-performance', 'admin');
-  });
-  it('GET admin/teacher-dashboard', async () => {
-    if (guard()) await parity('/api/Reports/admin/teacher-dashboard', 'admin', normTeacherDashboard);
-  });
+
   it('GET teacher/overview + teacher/export', async () => {
     if (!guard()) return;
     await parity('/api/Reports/teacher/overview', 'teacher');
@@ -569,7 +645,8 @@ describe.runIf(process.env.SKIP_DOTNET_PARITY !== '1')('parity voi backend .NET 
   it('GET class/{id}/dashboard', async () => {
     if (!guard()) return;
     for (const c of [A(), B(), ids.classes.C, ids.classes.D, randomUUID(), 'xyz']) {
-      await parity(`/api/Reports/class/${c}/dashboard`, 'student');
+      // Ban Node chan hoc sinh xem dashboard lop (ban .NET cho phep) -> so sanh bang admin.
+      await parity(`/api/Reports/class/${c}/dashboard`, 'admin');
     }
   });
   it('GET student/dashboard', async () => {

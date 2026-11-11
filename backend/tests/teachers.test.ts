@@ -3,7 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../src/db.js';
 import { uploadUrlToDiskPath } from '../src/utils/upload.js';
-import { app } from './helpers.js';
+import { app, auth } from './helpers.js';
 import { cleanupPeople, createCourse, createUser, type TestUser } from './people.fixture.js';
 
 // GiangVienController: /api/GiangVien/* (+ phan upload/xoa avatar dung chung voi HocSinh/Parent).
@@ -117,18 +117,25 @@ describe('/api/GiangVien profile', () => {
 });
 
 describe('/api/GiangVien specializations + assign-courses', () => {
+  it('assign-courses: giang vien tu goi -> 403 (ban .NET khong kiem tra quyen)', async () => {
+    const res = await request(app).post('/api/GiangVien/assign-courses').set(gv.headers).send({ maGiangVien: gv.profileId, courseIds: [courseA] });
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ message: 'Bạn không có quyền truy cập tài nguyên này.', statusCode: 403 });
+    expect(await prisma.giangvienkhoahoc.count({ where: { MaGiangVien: gv.profileId! } })).toBe(0);
+  });
+
   it('assign-courses: giang vien khong ton tai -> 404, thieu CourseIds -> 400', async () => {
-    let res = await request(app).post('/api/GiangVien/assign-courses').set(gv.headers).send({ maGiangVien: '11111111-1111-1111-1111-111111111111', courseIds: [] });
+    let res = await request(app).post('/api/GiangVien/assign-courses').set(await auth('admin')).send({ maGiangVien: '11111111-1111-1111-1111-111111111111', courseIds: [] });
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('TEACHER_NOT_FOUND');
-    res = await request(app).post('/api/GiangVien/assign-courses').set(gv.headers).send({ courseIds: null });
+    res = await request(app).post('/api/GiangVien/assign-courses').set(await auth('admin')).send({ courseIds: null });
     expect(res.body.errors).toEqual({ CourseIds: ['The CourseIds field is required.'] });
   });
 
   it('assign-courses thay toan bo danh sach, specializations doc lai', async () => {
-    let res = await request(app).post('/api/GiangVien/assign-courses').set(gv.headers).send({ maGiangVien: gv.profileId, courseIds: [courseA, courseB] });
+    let res = await request(app).post('/api/GiangVien/assign-courses').set(await auth('admin')).send({ maGiangVien: gv.profileId, courseIds: [courseA, courseB] });
     expect(res.body).toMatchObject({ success: true, message: 'Phân công môn dạy cho giảng viên thành công.', data: null });
-    res = await request(app).post('/api/GiangVien/assign-courses').set(gv.headers).send({ maGiangVien: gv.profileId, courseIds: [courseB] });
+    res = await request(app).post('/api/GiangVien/assign-courses').set(await auth('admin')).send({ maGiangVien: gv.profileId, courseIds: [courseB] });
     expect(res.status).toBe(200);
     res = await request(app).get('/api/GiangVien/specializations').set(gv.headers);
     expect(res.body.message).toBe('Lấy danh sách chuyên môn giảng viên thành công.');

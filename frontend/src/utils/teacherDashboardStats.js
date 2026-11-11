@@ -1,6 +1,6 @@
 // Hàm tổng hợp/định dạng thuần (pure) cho Teacher Dashboard — dùng chung cho cả dữ
 // liệu thật (teacherDashboardApi.js) lẫn UI, không quan tâm nguồn dữ liệu tới từ đâu.
-import { summarizeScoreBuckets, buildContinuousBins } from "./statsSeeder";
+import { summarizeScoreBuckets, buildContinuousBins } from "./statsUtils";
 
 export const summarizeCompletedClassResults = (classes, exams) =>
   classes

@@ -5,6 +5,7 @@ import NotificationPanel from '../../components/NotificationPanel';
 import BaseApi from '../../api/BaseApi';
 import { p0Api } from '../../api/p0Api';
 import '../../styles/notification-badge.css';
+import { onNewNotification } from '../../components/RealtimeNotifications';
 
 ChartJS.register(...registerables);
 
@@ -57,6 +58,9 @@ const ParentDashboard = () => {
     };
 
     // Fetch unread notification count
+    // Thong bao moi (realtime) -> cap nhat so chua doc tren chuong ngay, khong can tai lai trang.
+    useEffect(() => onNewNotification(() => fetchUnreadCount()), []);
+
     const fetchUnreadCount = async () => {
         try {
             const res = await BaseApi.get('Notification/unread-count');

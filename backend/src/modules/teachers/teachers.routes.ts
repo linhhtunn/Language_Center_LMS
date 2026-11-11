@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { prisma } from '../../db.js';
 import { requireAuth } from '../../middlewares/auth.js';
+import { requirePermission } from '../../middlewares/permission.js';
 import { fail, ok } from '../../utils/apiResponse.js';
 import { bindBody, notTrue, sendProblem, type DtoSpec } from '../classes/dtoBinding.js';
 import {
@@ -178,8 +179,9 @@ router.get('/api/GiangVien/specializations', requireAuth, async (_req, res) => {
   return res.json(ok(data, 'Lấy danh sách chuyên môn giảng viên thành công.'));
 });
 
-// Phan cong cac mon hoc (khoa hoc) cho giang vien. Ban .NET KHONG kiem tra quyen o day (chi can dang nhap).
-router.post('/api/GiangVien/assign-courses', requireAuth, async (req, res) => {
+// Phan cong cac mon hoc (khoa hoc) cho giang vien (trang Quan ly nguoi dung cua admin).
+// Ban .NET KHONG kiem tra quyen (ai dang nhap cung goi duoc) -> ban Node yeu cau USERS_EDIT.
+router.post('/api/GiangVien/assign-courses', ...requirePermission('USERS_EDIT'), async (req, res) => {
   const bound = bindBody<AssignCoursesRequest>(req, AssignCoursesRequestSpec, 'request');
   if (!bound.ok) return sendProblem(res, bound.status, bound.body);
   const request = bound.value;

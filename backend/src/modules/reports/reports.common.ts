@@ -1,8 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../db.js';
-import { average, dotnetRound, seededNumber } from './reports.dotnet.js';
+import { average, dotnetRound } from './reports.dotnet.js';
 
-// Phan dung chung cua ReportsService.cs: DTO chuyen can / pho diem va cac ham fallback seeded.
+// Phan dung chung cua ReportsService.cs: DTO chuyen can / pho diem.
 
 /** `x.DaXoa != true` cua EF; Pomelo dich thanh `(DaXoa = FALSE) OR (DaXoa IS NULL)` - giu dung thu tu/dang de MySQL chon cung ke hoach (thu tu dong tra ve). */
 export const notDeleted = { OR: [{ DaXoa: false }, { DaXoa: null }] };
@@ -55,30 +55,12 @@ export const emptyScoreDistribution = (): ScoreDistributionDto => ({
   averageScore: 0,
 });
 
-export function fallbackAttendanceRate(estimatedTotal: number, seedSuffix = 'overview'): AttendanceRateDto {
-  if (estimatedTotal <= 0) estimatedTotal = 120;
-  const present = dotnetRound(estimatedTotal * seededNumber(`fallback-att-present-${seedSuffix}`, 0.82, 0.9, 4));
-  const late = dotnetRound(estimatedTotal * seededNumber(`fallback-att-late-${seedSuffix}`, 0.03, 0.07, 4));
-  const absent = dotnetRound(estimatedTotal * seededNumber(`fallback-att-absent-${seedSuffix}`, 0.04, 0.09, 4));
-  let excused = estimatedTotal - present - late - absent;
-  if (excused < 0) excused = 0;
-  return makeAttendanceRate(present, absent, late, excused, estimatedTotal);
-}
-
-export function fallbackScoreDistribution(estimatedCount: number, seedSuffix = 'overview'): ScoreDistributionDto {
-  if (estimatedCount <= 0) estimatedCount = 80;
-  const above85 = dotnetRound(estimatedCount * seededNumber(`fallback-score-above-${seedSuffix}`, 0.22, 0.3, 4));
-  const from7To85 = dotnetRound(estimatedCount * seededNumber(`fallback-score-7-85-${seedSuffix}`, 0.32, 0.4, 4));
-  const from5To7 = dotnetRound(estimatedCount * seededNumber(`fallback-score-5-7-${seedSuffix}`, 0.22, 0.3, 4));
-  let under5 = estimatedCount - above85 - from7To85 - from5To7;
-  if (under5 < 0) under5 = 0;
-  const avg = seededNumber(`fallback-score-avg-${seedSuffix}`, 7.0, 8.0, 2);
-  return { under5, from5To7, from7To85, above85, total: estimatedCount, averageScore: avg };
-}
-
-/** CalculateScoreDistribution: danh sach rong -> so lieu mau. */
-export function calculateScoreDistribution(scores: number[], seedSuffix = 'overview', estimatedFallbackCount = 80): ScoreDistributionDto {
-  if (scores.length === 0) return fallbackScoreDistribution(estimatedFallbackCount, seedSuffix);
+/**
+ * CalculateScoreDistribution. Ban .NET: danh sach rong -> BIA so lieu mau (seeded) nhu that.
+ * Ban Node: rong -> toan so 0 (total = 0 nghia la chua co du lieu).
+ */
+export function calculateScoreDistribution(scores: number[]): ScoreDistributionDto {
+  if (scores.length === 0) return emptyScoreDistribution();
   return {
     under5: scores.filter((s) => s < 5.0).length,
     from5To7: scores.filter((s) => s >= 5.0 && s < 7.0).length,
@@ -90,8 +72,8 @@ export function calculateScoreDistribution(scores: number[], seedSuffix = 'overv
 }
 
 /** CalculateAttendanceRate: nhan danh sach MaCode trang thai (null neu ban ghi khong co trang thai). */
-export function calculateAttendanceRate(codes: (string | null)[], seedSuffix = 'overview', estimatedFallbackTotal = 120): AttendanceRateDto {
-  if (codes.length === 0) return fallbackAttendanceRate(estimatedFallbackTotal, seedSuffix);
+export function calculateAttendanceRate(codes: (string | null)[]): AttendanceRateDto {
+  if (codes.length === 0) return emptyAttendanceRate(); // ban .NET: bia so lieu mau
   let present = 0;
   let absent = 0;
   let late = 0;

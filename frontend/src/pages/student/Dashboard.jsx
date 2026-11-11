@@ -11,6 +11,7 @@ import bannerHai from "../../assets/a2.jpeg";
 import bannerBa from "../../assets/a3.jpeg";
 import BarLineComparisonChart from '../../components/charts/BarLineComparisonChart';
 import { fetchStudentClasses, summarizeStudentClassScores } from '../../utils/studentScoreSummary';
+import { onNewNotification } from '../../components/RealtimeNotifications';
 const Dashboard = () => {
     const { user } = useAuth();
     const [showNotifications, setShowNotifications] = useState(false);
@@ -47,6 +48,11 @@ const Dashboard = () => {
             setReportLoading(false);
         }
     };
+
+    // Thong bao moi (realtime) -> cap nhat so chua doc tren chuong ngay, khong can tai lai trang.
+
+    useEffect(() => onNewNotification(() => fetchUnreadCount()), []);
+
 
     const fetchUnreadCount = async () => {
         try {

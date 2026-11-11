@@ -13,6 +13,7 @@ import {
   ReportForbiddenError,
 } from './reports.classStudent.service.js';
 import { getClassDashboard, getParentChildrenDashboard, getStudentCourseDashboard } from './reports.dashboards.service.js';
+import { canViewClassDashboard, canViewStudentDashboard, FORBIDDEN_BODY } from './reports.access.js';
 import { parseGuid } from './reports.dotnet.js';
 import { exportAdminReportCsv, exportTeacherOverviewCsv, getAdminOverview, getTeacherOverview } from './reports.overview.service.js';
 
@@ -145,6 +146,7 @@ router.get('/api/Reports/student/export', ...STUDENT, async (req, res) => {
 
 router.get('/api/Reports/class/:classId/dashboard', guidRoute, requireAuth, async (req, res) => {
   const classId = parseGuid(req.params.classId)!;
+  if (!(await canViewClassDashboard(req.user!, classId))) return res.status(403).json(FORBIDDEN_BODY);
   try {
     return res.json(ok(await getClassDashboard(classId), 'Lấy dữ liệu dashboard lớp học thành công.'));
   } catch (e) {
@@ -180,6 +182,7 @@ router.get('/api/Reports/student/dashboard', requireAuth, async (req, res) => {
     const classId = classQ.value ?? '00000000-0000-0000-0000-000000000000';
     const targetStudentId = studentQ.value ?? profileIdOf(req);
     if (!targetStudentId) return res.status(400).json(fail('Không tìm thấy mã học sinh.', 'STUDENT_ID_REQUIRED'));
+    if (!(await canViewStudentDashboard(req.user!, targetStudentId, classId))) return res.status(403).json(FORBIDDEN_BODY);
     return res.json(ok(await getStudentCourseDashboard(targetStudentId, classId), 'Lấy dữ liệu dashboard học sinh thành công.'));
   } catch (e) {
     return res.status(500).json(fail(`Lỗi: ${errMsg(e)}`, 'REPORT_STUDENT_DASHBOARD_ERROR'));

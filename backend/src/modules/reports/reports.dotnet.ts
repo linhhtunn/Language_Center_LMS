@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 
 // =====================================================================================
 // Cac ham mo phong DUNG HANH VI .NET ma ReportsService.cs dung, de so lieu (ke ca so "gia lap"
@@ -38,96 +37,7 @@ export function average(values: number[]): number {
   return sum / values.length;
 }
 
-/** HashSeed(string) trong ReportsService.cs. */
-export function hashSeed(input: string): number {
-  if (!input) return 0;
-  return createHash('md5').update(input, 'utf8').digest().readInt32LE(0);
-}
-
-/** System.Random(seed) cua .NET (thuat toan cu, giu nguyen tu .NET Framework). */
-export class DotnetRandom {
-  private readonly seedArray: number[];
-  private inext = 0;
-  private inextp = 21;
-
-  constructor(seed: number) {
-    const sa = new Array<number>(56).fill(0);
-    const subtraction = seed === -2147483648 ? INT_MAX : Math.abs(seed);
-    let mj = (161803398 - subtraction) | 0;
-    sa[55] = mj;
-    let mk = 1;
-    let ii = 0;
-    for (let i = 1; i < 55; i++) {
-      if ((ii += 21) >= 55) ii -= 55;
-      sa[ii] = mk;
-      mk = (mj - mk) | 0;
-      if (mk < 0) mk = (mk + INT_MAX) | 0;
-      mj = sa[ii];
-    }
-    for (let k = 1; k < 5; k++) {
-      for (let i = 1; i < 56; i++) {
-        let n = i + 30;
-        if (n >= 55) n -= 55;
-        sa[i] = (sa[i] - sa[1 + n]) | 0; // int cua C# tran so thi quay vong
-        if (sa[i] < 0) sa[i] = (sa[i] + INT_MAX) | 0;
-      }
-    }
-    this.seedArray = sa;
-  }
-
-  private internalSample(): number {
-    let locINext = this.inext;
-    if (++locINext >= 56) locINext = 1;
-    let locINextp = this.inextp;
-    if (++locINextp >= 56) locINextp = 1;
-    let retVal = (this.seedArray[locINext] - this.seedArray[locINextp]) | 0;
-    if (retVal === INT_MAX) retVal--;
-    if (retVal < 0) retVal = (retVal + INT_MAX) | 0;
-    this.seedArray[locINext] = retVal;
-    this.inext = locINext;
-    this.inextp = locINextp;
-    return retVal;
-  }
-
-  private sample(): number {
-    return this.internalSample() * (1.0 / INT_MAX);
-  }
-
-  private sampleForLargeRange(): number {
-    let result = this.internalSample();
-    const negative = this.internalSample() % 2 === 0;
-    if (negative) result = -result;
-    let d = result;
-    d += INT_MAX - 1;
-    d /= 2 * INT_MAX - 1;
-    return d;
-  }
-
-  nextDouble(): number {
-    return this.sample();
-  }
-
-  /** Random.Next(minValue, maxValue) - maxValue khong bao gom. */
-  next(minValue: number, maxValue: number): number {
-    const range = maxValue - minValue;
-    return range <= INT_MAX
-      ? Math.trunc(this.sample() * range) + minValue
-      : Math.trunc(this.sampleForLargeRange() * range) + minValue;
-  }
-}
-
-/** SeededNumber(seedKey, min, max, decimals) trong ReportsService.cs. */
-export function seededNumber(seedKey: string, min: number, max: number, decimals = 1): number {
-  const rng = new DotnetRandom(hashSeed(seedKey));
-  const raw = rng.nextDouble() * (max - min) + min;
-  const factor = 10 ** decimals;
-  return roundHalfEven(raw * factor) / factor;
-}
-
-/** SeededInt(seedKey, min, max) - ca hai dau deu bao gom. */
-export function seededInt(seedKey: string, min: number, max: number): number {
-  return new DotnetRandom(hashSeed(seedKey)).next(min, max + 1);
-}
+// (Ban .NET co HashSeed/Random/SeededNumber/SeededInt de BIA so lieu bao cao - ban Node da bo.)
 
 /** Guid.ToString("N"): 32 ky tu hex thuong, khong gach. */
 export const guidN = (id: string) => id.toLowerCase().replaceAll('-', '');

@@ -9,6 +9,7 @@ import ClassStatsTab from '../../components/teacher/dashboard/ClassStatsTab';
 import ExamStatsTab from '../../components/teacher/dashboard/ExamStatsTab';
 import { loadTeacherClasses, loadTeacherExams } from '../../utils/teacherDashboardApi';
 import { summarizeCompletedClassResults } from '../../utils/teacherDashboardStats';
+import { onNewNotification } from '../../components/RealtimeNotifications';
 
 const TeacherDashboard = () => {
     const { user } = useAuth();
@@ -62,6 +63,11 @@ const TeacherDashboard = () => {
     useEffect(() => {
         fetchUnreadCount();
     }, []);
+
+    // Thong bao moi (realtime) -> cap nhat so chua doc tren chuong ngay, khong can tai lai trang.
+
+    useEffect(() => onNewNotification(() => fetchUnreadCount()), []);
+
 
     const fetchUnreadCount = async () => {
         try {

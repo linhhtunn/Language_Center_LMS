@@ -254,8 +254,8 @@ describe('POST /api/StudentAssignment/{id}/submit', () => {
     expect(nb).toMatchObject({ MaHocSinh: studentId, LanNop: 1, ThoiGianThucTe: 125, TrangThaiChamBai: 24 });
     expect(nb.DiemSo?.toNumber()).toBe(4.58);
     const essay = nb.chitietnopbai.find((c) => c.MaCauHoi === q.essay)!;
-    // Giong EF: DiemDatDuoc null bi bo qua -> DB luu mac dinh 0.00.
-    expect(essay.DiemDatDuoc?.toNumber()).toBe(0);
+    // Ban .NET luu 0.00 (EF bo qua null o cot co mac dinh) -> cau chua cham thanh SAI. Ban Node luu NULL.
+    expect(essay.DiemDatDuoc).toBeNull();
     expect(essay).toMatchObject({ DapAnHocVien: 'Đoạn văn', TrangThaiCau: 21, TrangThaiChamTay: 24 });
     const fill = nb.chitietnopbai.find((c) => c.MaCauHoi === q.fill)!;
     expect(fill).toMatchObject({ DapAnHocVien: null, TrangThaiCau: 20, TrangThaiChamTay: 25 });
@@ -278,14 +278,21 @@ describe('POST /api/StudentAssignment/{id}/submit', () => {
 });
 
 describe('GET result / ai-feedback / ai-progress', () => {
-  it('result doc lai tu DB (cau tu luan da luu 0.00 -> WRONG nhu ban .NET)', async () => {
-    const res = await request(app).get(`${BASE}/${ids.Open}/result`).set(await auth('student'));
+  it('result: cau tu luan chua cham -> PENDING (ban .NET bao WRONG)', async () => {
+    const h = await auth('student');
+    const res = await request(app).get(`${BASE}/${ids.Open}/result`).set(h);
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('Lấy kết quả thành công.');
     const d = res.body.data;
-    expect(d).toMatchObject({ lanNop: 1, diemSo: 4.58, diemToiDa: 10.15, soCauDung: 3, soCauSai: 2, soCauChuaLam: 1, soCauChoCham: 0, dangChoCham: false, soLanConLai: 1 });
+    expect(d).toMatchObject({ lanNop: 1, diemSo: 4.58, diemToiDa: 10.15, soCauDung: 3, soCauSai: 0, soCauChuaLam: 1, soCauChoCham: 2, dangChoCham: true, soLanConLai: 1 });
     expect(d.thoiGianNop).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
-    expect(d.chiTiet.map((c: { ketQua: string }) => c.ketQua)).toEqual(['CORRECT', 'PARTIAL', 'PARTIAL', 'WRONG', 'WRONG', 'BLANK']);
+    expect(d.chiTiet.map((c: { ketQua: string }) => c.ketQua)).toEqual(['CORRECT', 'PARTIAL', 'PARTIAL', 'PENDING', 'PENDING', 'BLANK']);
+
+    // Bai nop cu do ban .NET luu 0.00 (TrangThaiChamTay = cho cham) -> van hien la PENDING.
+    await prisma.chitietnopbai.updateMany({ where: { MaNopBai: d.maNopBai, MaCauHoi: q.essay }, data: { DiemDatDuoc: 0 } });
+    const legacy = (await request(app).get(`${BASE}/${ids.Open}/result`).set(h)).body.data;
+    expect(legacy.chiTiet.map((c: { ketQua: string }) => c.ketQua)).toEqual(['CORRECT', 'PARTIAL', 'PARTIAL', 'PENDING', 'PENDING', 'BLANK']);
+    expect(legacy).toMatchObject({ soCauSai: 0, soCauChoCham: 2, dangChoCham: true });
     expect(d.chiTiet[1].dapAnHocVien).toEqual({ 1: 'a', 2: 'b', 3: 'x' });
 
     const none = await request(app).get(`${BASE}/${ids.Pending}/result`).set(await auth('student'));

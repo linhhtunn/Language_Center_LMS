@@ -401,6 +401,13 @@ describe('Yeu cau doi lich', () => {
     const forbidden = await request(app).get('/api/Schedule/change-requests/pending').set(await auth('teacher'));
     expect(forbidden.status).toBe(403);
     expect(forbidden.body).toEqual({ message: 'Bạn không có quyền truy cập tài nguyên này.', statusCode: 403 });
+    // Ban .NET: duyet/tu choi qua reschedule-requests KHONG kiem tra quyen -> Node chan giao vien/hoc sinh.
+    for (const role of ['teacher', 'student'] as const) {
+      for (const act of ['approve', 'reject']) {
+        const r = await request(app).put(`/api/Schedule/reschedule-requests/${nodeId2}/${act}`).set(await auth(role));
+        expect(r.status).toBe(403);
+      }
+    }
   });
 });
 

@@ -6,6 +6,7 @@ import { fail, ok, type ApiResponse } from '../../utils/apiResponse.js';
 import { deleteUpload, saveUpload, uploadUrlToDiskPath } from '../../utils/upload.js';
 import * as repo from './notification.repository.js';
 import { notDeleted } from './notification.repository.js';
+import { emitToUsers } from '../../realtime/socket.js';
 
 // Chuyen tu Services/NotificationService.cs.
 
@@ -215,19 +216,20 @@ export async function create(
     throw err;
   }
 
-  return ok(
-    {
-      id: maThongBao,
-      title: dto.title,
-      content: dto.content,
-      doiTuong,
-      createdAt: utcDateTime(now),
-      isRead: false,
-      readAt: null,
-      attachments: saved.map((s) => ({ id: s.maTaiNguyen, fileName: s.fileName })),
-    },
-    'Tạo thông báo thành công',
-  );
+  const notification: NotificationDto = {
+    id: maThongBao,
+    title: dto.title,
+    content: dto.content,
+    doiTuong,
+    createdAt: utcDateTime(now),
+    isRead: false,
+    readAt: null,
+    attachments: saved.map((s) => ({ id: s.maTaiNguyen, fileName: s.fileName })),
+  };
+  // Ban .NET KHONG bao gio day realtime khi tao thong bao (NotificationEventService khong duoc goi) ->
+  // nguoi nhan phai tai lai trang. Ban Node day "NewNotification" toi dung nhung nguoi nhan vua ghi.
+  emitToUsers('/notification', receiverIds, 'NewNotification', notification);
+  return ok(notification, 'Tạo thông báo thành công');
 }
 
 export async function update(

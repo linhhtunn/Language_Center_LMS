@@ -435,9 +435,9 @@ export async function submitAssignment(
       DaXoa: false,
     };
     if (coDapAn) detail.DapAnHocVien = answer!.dapAn as Prisma.InputJsonValue;
-    // .NET gan DiemDatDuoc = null cho cau PENDING, nhung EF bo qua cot co HasDefaultValueSql
-    // khi gia tri la null -> DB luu mac dinh 0.00. Bo trong cot o day de ket qua giong het.
-    if (g.ketQua !== 'PENDING') detail.DiemDatDuoc = diemDatDuoc;
+    // LOI BAN .NET: gan DiemDatDuoc = null cho cau PENDING nhung EF bo qua null o cot co gia tri mac dinh
+    // -> DB luu 0.00 -> trang ket qua bao cau tu luan chua cham la SAI. Ban Node ghi NULL ro rang.
+    detail.DiemDatDuoc = g.ketQua === 'PENDING' ? null : diemDatDuoc;
     details.push(detail);
   }
 
@@ -485,6 +485,8 @@ export async function getLatestResult(userId: string, assignmentId: string): Pro
   const maxAttempts = resolveMaxAttempts(envelope);
   const daNop = await repo.countSubmissions(eventId, student.MaHocSinh);
 
+  const chamChoChamId = await repo.getCategoryId('TRANG_THAI_CHAM_BAI', 'CHAM_CHO_CHAM');
+
   // ToDictionary: trung khoa -> ArgumentException (500) giong ban .NET.
   const byQuestion = new Map<string, repo.SubmissionDetailRow>();
   for (const d of submission.chitiet) {
@@ -521,8 +523,11 @@ export async function getLatestResult(userId: string, assignmentId: string): Pro
     const diemDatDuoc = detail?.DiemDatDuoc ?? new Decimal(0);
     const coTraLoi = !isBlank(detail?.DapAnHocVien);
 
+    // Cau cho cham: DiemDatDuoc NULL, HOAC TrangThaiChamTay = CHAM_CHO_CHAM (bai nop cu do ban .NET luu
+    // 0.00 thay vi NULL - van nhan dung la "cho cham" thay vi SAI).
+    const choCham = detail != null && (detail.DiemDatDuoc == null || (chamChoChamId != null && detail.TrangThaiChamTay === chamChoChamId));
     const ketQua =
-      detail != null && detail.DiemDatDuoc == null
+      choCham
         ? 'PENDING'
         : !coTraLoi
           ? 'BLANK'

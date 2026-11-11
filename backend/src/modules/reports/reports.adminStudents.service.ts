@@ -1,10 +1,14 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../db.js';
-import { efColumns } from './reports.common.js';
-import { cultureCompare, dotnetRound, guidN, seededInt, seededNumber } from './reports.dotnet.js';
+import { efColumns, notDeleted, toDouble } from './reports.common.js';
+import { cultureCompare, dotnetRound, guidN } from './reports.dotnet.js';
 
 // GetAdminStudentPerformanceAsync: bang hoc sinh x lop toan he thong + top 8 hoc vien.
-// Diem/chuyen can o day la so "gia lap" deterministic (seed theo ma HS/ma lop) giong het ban .NET.
+// Ban .NET BIA toan bo diem / so buoi / so buoi vang (seed theo ma HS + ma lop), ke ca khi da co du lieu that,
+// va tra 500 khi chua co hoc sinh ghi danh. Ban Node tinh tu du lieu that:
+//   score        = TB diem cac bai da cham cua HS trong lop (moi bai lay lan nop moi nhat), null neu chua co
+//   totalSessions = so ban ghi diem danh cua HS trong lop (buoi hoc chua xoa), absenceCount = so buoi DD_ABSENT
+//   absenceRate  = absenceCount / totalSessions * 100 (1 so le), null neu chua diem danh buoi nao
 
 export interface AdminStudentPerformanceRowDto {
   classId: string;
@@ -45,13 +49,15 @@ function rankRows(rows: AdminStudentPerformanceRowDto[]): AdminStudentPerformanc
     if (sa !== sb) return sb - sa;
     return cultureCompare(a.studentName, b.studentName);
   });
-  ranked.forEach((r, k) => (r.rank = k + 1));
+  let rank = 0;
+  for (const r of ranked) r.rank = r.score === null ? null : ++rank;
   return ranked;
 }
 
 function buildTopLearners(rows: AdminStudentPerformanceRowDto[]): AdminTopLearnerDto[] {
   const groups = new Map<string, AdminStudentPerformanceRowDto[]>();
   for (const r of rows) {
+    if (r.score === null) continue; // chi xep hang HS da co diem
     const key = r.studentId.toLowerCase();
     const g = groups.get(key);
     if (g) g.push(r);
@@ -95,13 +101,7 @@ export async function getAdminStudentPerformance(): Promise<AdminStudentPerforma
     INNER JOIN lophoc AS l ON h.MaLopHoc = l.MaLopHoc
     WHERE ((h.DaXoa = FALSE) OR (h.DaXoa IS NULL)) AND ((h.TrangThai = TRUE) OR (h.TrangThai IS NULL))`);
 
-  if (enrollments.length === 0) {
-    // Nhanh "demo universe" cua ban .NET dung lop dau tien da goi
-    //   new Guid(HashSeed(..).ToString("X8") + "-0000-0000-0000-000000000000".Substring(8))
-    // -> chuoi 28 ky tu khong phai Guid hop le -> FormatException -> controller tra 500.
-    // Giu nguyen hanh vi do (loi cua ban goc).
-    throw new Error('Unrecognized Guid format.');
-  }
+  if (enrollments.length === 0) return { performanceRows: [], topLearners: [] };
 
   const classSizeLookup = new Map<string, number>();
   for (const e of enrollments) classSizeLookup.set(e.h_MaLopHoc, (classSizeLookup.get(e.h_MaLopHoc) ?? 0) + 1);
@@ -115,14 +115,58 @@ export async function getAdminStudentPerformance(): Promise<AdminStudentPerforma
   const classCourseLabels = new Map<string, string>();
   for (const cl of courseLinks) if (cl.k_TenKhoaHoc != null) classCourseLabels.set(cl.c_MaLopHoc.toLowerCase(), cl.k_TenKhoaHoc);
 
+  const lc = (x: string) => x.toLowerCase();
+  const pair = (studentId: string, classId: string) => `${lc(studentId)}|${lc(classId)}`;
+  const classIds = [...new Set(enrollments.map((e) => e.h_MaLopHoc))];
+  const studentIds = [...new Set(enrollments.map((e) => e.h_MaHocSinh))];
+
+  // Diem: bai nop co diem, chua xoa, thuoc su kien (chua xoa) cua lop. Nop nhieu lan -> lay lan moi nhat.
+  const submissions = await prisma.nopbai.findMany({
+    where: {
+      ...notDeleted,
+      DiemSo: { not: null },
+      MaHocSinh: { in: studentIds },
+      sukienlophoc: { MaLopHoc: { in: classIds }, ...notDeleted },
+    },
+    select: { MaHocSinh: true, MaSuKien: true, DiemSo: true, LanNop: true, ThoiGianNop: true, sukienlophoc: { select: { MaLopHoc: true } } },
+  });
+  const latestPerEvent = new Map<string, (typeof submissions)[number]>();
+  const newer = (a: (typeof submissions)[number], b: (typeof submissions)[number]) =>
+    (a.LanNop ?? 0) !== (b.LanNop ?? 0) ? (a.LanNop ?? 0) > (b.LanNop ?? 0) : (a.ThoiGianNop?.getTime() ?? 0) > (b.ThoiGianNop?.getTime() ?? 0);
+  for (const sub of submissions) {
+    const key = `${lc(sub.MaHocSinh)}|${lc(sub.MaSuKien)}`;
+    const cur = latestPerEvent.get(key);
+    if (!cur || newer(sub, cur)) latestPerEvent.set(key, sub);
+  }
+  const scoresByPair = new Map<string, number[]>();
+  for (const sub of latestPerEvent.values()) {
+    const key = pair(sub.MaHocSinh, sub.sukienlophoc.MaLopHoc);
+    const list = scoresByPair.get(key) ?? [];
+    list.push(toDouble(sub.DiemSo!));
+    scoresByPair.set(key, list);
+  }
+
+  // Chuyen can: ban ghi diem danh chua xoa, cua buoi hoc chua xoa thuoc lop.
+  const attendance = await prisma.diemdanh.findMany({
+    where: { ...notDeleted, MaHocSinh: { in: studentIds }, buoihoc: { MaLopHoc: { in: classIds }, ...notDeleted } },
+    select: { MaHocSinh: true, buoihoc: { select: { MaLopHoc: true } }, chitietdanhmuc: { select: { MaCode: true } } },
+  });
+  const attByPair = new Map<string, { total: number; absent: number }>();
+  for (const a of attendance) {
+    const key = pair(a.MaHocSinh, a.buoihoc.MaLopHoc);
+    const cur = attByPair.get(key) ?? { total: 0, absent: 0 };
+    cur.total++;
+    if (a.chitietdanhmuc?.MaCode === 'DD_ABSENT') cur.absent++;
+    attByPair.set(key, cur);
+  }
+
   const rawPerClass = new Map<string, AdminStudentPerformanceRowDto[]>();
   for (const enr of enrollments) {
     const classId = enr.h_MaLopHoc;
     const studentId = enr.h_MaHocSinh;
-    const totalSessions = Math.max(8, seededInt(`${guidN(classId)}-sessions`, 10, 24));
-    const score = seededNumber(`${guidN(studentId)}-${guidN(classId)}-score`, 4.2, 9.8, 1);
-    const absenceCount = seededInt(`${guidN(studentId)}-${guidN(classId)}-abs`, 0, Math.min(totalSessions, 6));
-    const absenceRate = dotnetRound((absenceCount / Math.max(totalSessions, 1)) * 100, 1);
+    const key = pair(studentId, classId);
+    const scores = scoresByPair.get(key) ?? [];
+    const att = attByPair.get(key) ?? { total: 0, absent: 0 };
 
     const row: AdminStudentPerformanceRowDto = {
       classId,
@@ -131,17 +175,16 @@ export async function getAdminStudentPerformance(): Promise<AdminStudentPerforma
       studentId,
       studentName: enr.n_HoTen ?? guidN(studentId).substring(0, 8),
       email: enr.n_Email ?? '',
-      score,
+      score: scores.length > 0 ? dotnetRound(scores.reduce((x, y) => x + y, 0) / scores.length, 1) : null,
       rank: null,
       classSize: classSizeLookup.get(classId) ?? 0,
-      absenceCount,
-      totalSessions,
-      absenceRate,
+      absenceCount: att.absent,
+      totalSessions: att.total,
+      absenceRate: att.total > 0 ? dotnetRound((att.absent / att.total) * 100, 1) : null,
     };
-    const key = classId.toLowerCase();
-    const list = rawPerClass.get(key);
+    const list = rawPerClass.get(lc(classId));
     if (list) list.push(row);
-    else rawPerClass.set(key, [row]);
+    else rawPerClass.set(lc(classId), [row]);
   }
 
   const performanceRows: AdminStudentPerformanceRowDto[] = [];

@@ -5,23 +5,18 @@ import { Chart as ChartJS, registerables } from "chart.js";
 import { p0Api } from "../../api/p0Api";
 
 import {
-  hashSeed,
-  seededNumber,
   formatPercent,
-  buildDemoRosterForClass,
   normalizeClass,
   getScoreBucket,
   buildGroupedBarOptions,
   summarizeScoreBuckets,
-} from "../../utils/statsSeeder";
-import {
-  DEMO_COURSE_NAMES,
-  DEMO_STUDENT_NAMES,
-} from "../../constants/statsConstants";
+} from "../../utils/statsUtils";
 
 ChartJS.register(...registerables);
 
-
+// Học sinh chưa có bài nào được chấm điểm: không xếp hạng, hiển thị "—".
+const NO_SCORE_BUCKET = { label: "Chưa có điểm", color: "#868e96" };
+const displayValue = (value) => (value == null ? "—" : value);
 
 const AdminStudentStats = () => {
   const navigate = useNavigate();
@@ -29,74 +24,66 @@ const AdminStudentStats = () => {
   const [error, setError] = useState("");
   const [classesData, setClassesData] = useState([]);
   const [studentsByClass, setStudentsByClass] = useState({});
+  const [performanceRows, setPerformanceRows] = useState([]);
   const [classSearch, setClassSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
-  const [showDemoBadge, setShowDemoBadge] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     setError("");
     try {
-      const classRows = (await p0Api.classes.list()) || [];
-      const isDemo = classRows.length === 0;
-      setShowDemoBadge(isDemo);
+      const [classesResult, performanceResult] = await Promise.allSettled([
+        p0Api.classes.list(),
+        p0Api.reports.adminStudentPerformance(),
+      ]);
+      if (classesResult.status !== "fulfilled") {
+        throw classesResult.reason;
+      }
 
-      const normalizedClasses =
-        classRows.length > 0
-          ? classRows.map(normalizeClass)
-          : Array.from({ length: 12 }, (_, index) => ({
-              id: `demo-class-${index + 1}`,
-              name: `Lớp demo ${index + 1}`,
-              courses: [
-                { name: DEMO_COURSE_NAMES[index % DEMO_COURSE_NAMES.length] },
-              ],
-              teachers: [
-                { id: `demo-teacher-${index % 6}`, name: "Giảng viên demo" },
-              ],
-              currentSize: seededNumber(`demo-class-${index + 1}`, 14, 30, 0),
-            })).map(normalizeClass);
+      const classRows = classesResult.value || [];
+      const normalizedClasses = classRows.map(normalizeClass);
 
-      const rosterResults =
-        classRows.length > 0
-          ? await Promise.allSettled(
-              normalizedClasses.map((cls) => p0Api.classes.students(cls.id)),
-            )
+      const nextPerformanceRows =
+        performanceResult.status === "fulfilled" &&
+        Array.isArray(performanceResult.value?.performanceRows)
+          ? performanceResult.value.performanceRows
           : [];
+      if (performanceResult.status !== "fulfilled") {
+        setError(
+          "Không tải được dữ liệu điểm từ báo cáo, cột điểm sẽ hiển thị “—”.",
+        );
+      }
+
+      const rosterResults = await Promise.allSettled(
+        normalizedClasses.map((cls) => p0Api.classes.students(cls.id)),
+      );
 
       const nextRoster = {};
-      if (classRows.length > 0) {
-        rosterResults.forEach((result, index) => {
-          const cls = normalizedClasses[index];
-          if (result.status === "fulfilled") {
-            const rows =
-              Array.isArray(result.value) && result.value.length > 0
-                ? result.value
-                : buildDemoRosterForClass(cls.id, cls.currentSize);
-            nextRoster[cls.id] = rows;
-            if (
-              (!Array.isArray(result.value) || result.value.length === 0) &&
-              !showDemoBadge
-            ) {
-              setShowDemoBadge(true);
-            }
-          } else {
-            nextRoster[cls.id] = buildDemoRosterForClass(
-              cls.id,
-              cls.currentSize,
-            );
-            setShowDemoBadge(true);
-          }
-        });
-      } else {
-        normalizedClasses.forEach((cls) => {
-          nextRoster[cls.id] = buildDemoRosterForClass(cls.id, cls.currentSize);
-        });
-      }
+      rosterResults.forEach((result, index) => {
+        const cls = normalizedClasses[index];
+        if (
+          result.status === "fulfilled" &&
+          Array.isArray(result.value) &&
+          result.value.length > 0
+        ) {
+          nextRoster[cls.id] = result.value;
+          return;
+        }
+        // Không tải được danh sách lớp: dùng học sinh thật có trong báo cáo (nếu có).
+        nextRoster[cls.id] = nextPerformanceRows
+          .filter((row) => String(row.classId) === String(cls.id))
+          .map((row) => ({
+            studentId: row.studentId,
+            fullName: row.studentName,
+            email: row.email,
+          }));
+      });
 
       setClassesData(normalizedClasses);
       setStudentsByClass(nextRoster);
+      setPerformanceRows(nextPerformanceRows);
     } catch (err) {
       setError(err.message || "Không tải được dữ liệu thống kê học sinh.");
     } finally {
@@ -109,44 +96,65 @@ const AdminStudentStats = () => {
   }, []);
 
   const classRankings = useMemo(() => {
+    const scoreLookup = new Map();
+    performanceRows.forEach((row) => {
+      if (row.classId != null && row.studentId != null) {
+        scoreLookup.set(`${row.classId}-${row.studentId}`, row.score);
+      }
+    });
+
     const byClass = {};
     classesData.forEach((cls) => {
-      const roster =
-        (studentsByClass[cls.id] || []).length > 0
-          ? studentsByClass[cls.id]
-          : buildDemoRosterForClass(cls.id, cls.currentSize);
+      const roster = studentsByClass[cls.id] || [];
 
-      const scoredRows = roster
-        .map((student) => {
-          const sid =
-            student.studentId ??
-            student.id ??
-            `student-${hashSeed(student.email || student.fullName)}`;
-          const score = seededNumber(`${sid}-${cls.id}-score`, 4.2, 9.8, 1);
-          const bucket = getScoreBucket(score);
-          return {
-            studentId: sid,
-            fullName:
-              student.fullName ?? student.hoTen ?? student.name ?? "Học viên",
-            email: student.email ?? student.Email ?? "",
-            score,
-            scoreLabel: bucket.label,
-            scoreColor: bucket.color,
-          };
-        })
+      const baseRows = roster.map((student) => {
+        const sid = student.studentId ?? student.id;
+        const rawScore = scoreLookup.get(`${cls.id}-${sid}`);
+        const score =
+          rawScore != null && Number.isFinite(Number(rawScore))
+            ? Number(rawScore)
+            : null;
+        const bucket = score != null ? getScoreBucket(score) : NO_SCORE_BUCKET;
+        return {
+          studentId: sid,
+          fullName:
+            student.fullName ?? student.hoTen ?? student.name ?? "Học viên",
+          email: student.email ?? student.Email ?? "",
+          score,
+          scoreLabel: bucket.label,
+          scoreColor: bucket.color,
+        };
+      });
+
+      // Chỉ xếp hạng học sinh đã có điểm thật; học sinh chưa có điểm xếp cuối, không có hạng.
+      const scored = baseRows
+        .filter((row) => row.score != null)
         .sort(
           (left, right) =>
             right.score - left.score ||
             left.fullName.localeCompare(right.fullName),
-        )
-        .map((row, index, list) => ({
+        );
+      const unscored = baseRows
+        .filter((row) => row.score == null)
+        .sort((left, right) => left.fullName.localeCompare(right.fullName));
+
+      const scoredRows = scored.map((row, index, list) => ({
+        ...row,
+        rank: index + 1,
+        classSize: list.length,
+        rankPercentile: Number(
+          (((list.length - index) / list.length) * 100).toFixed(1),
+        ),
+      }));
+      const allRows = [
+        ...scoredRows,
+        ...unscored.map((row) => ({
           ...row,
-          rank: index + 1,
-          classSize: list.length || 1,
-          rankPercentile: Number(
-            (((list.length - index) / (list.length || 1)) * 100).toFixed(1),
-          ),
-        }));
+          rank: null,
+          classSize: scored.length,
+          rankPercentile: null,
+        })),
+      ];
 
       const bucketSummary = summarizeScoreBuckets(scoredRows, "score").map(
         (bucket) => ({
@@ -158,7 +166,7 @@ const AdminStudentStats = () => {
         }),
       );
 
-      const topScore = scoredRows.length > 0 ? scoredRows[0].score : 0;
+      const topScore = scoredRows.length > 0 ? scoredRows[0].score : null;
       const avgScore =
         scoredRows.length > 0
           ? Number(
@@ -166,19 +174,20 @@ const AdminStudentStats = () => {
                 scoredRows.reduce((s, r) => s + r.score, 0) / scoredRows.length
               ).toFixed(1),
             )
-          : 0;
+          : null;
 
       byClass[cls.id] = {
         class: cls,
-        rows: scoredRows,
+        rows: allRows,
+        scoredRows,
         bucketSummary,
         topScore,
         avgScore,
-        totalStudents: scoredRows.length,
+        totalStudents: allRows.length,
       };
     });
     return byClass;
-  }, [classesData, studentsByClass]);
+  }, [classesData, studentsByClass, performanceRows]);
 
   const filteredClasses = useMemo(() => {
     const keyword = classSearch.trim().toLowerCase();
@@ -243,8 +252,8 @@ const AdminStudentStats = () => {
   }, [currentRanking, selectedStudentId]);
 
   const classRankChart = useMemo(() => {
-    if (!currentRanking || currentRanking.rows.length === 0) return null;
-    const top10 = currentRanking.rows.slice(0, 10);
+    if (!currentRanking || currentRanking.scoredRows.length === 0) return null;
+    const top10 = currentRanking.scoredRows.slice(0, 10);
     return {
       data: {
         labels: top10.map((row, idx) => `#${idx + 1} ${row.fullName}`),
@@ -275,7 +284,7 @@ const AdminStudentStats = () => {
   }, [currentRanking]);
 
   const distributionChart = useMemo(() => {
-    if (!currentRanking) return null;
+    if (!currentRanking || currentRanking.scoredRows.length === 0) return null;
     const summary = currentRanking.bucketSummary;
     return {
       data: {
@@ -306,7 +315,8 @@ const AdminStudentStats = () => {
   }, [currentRanking]);
 
   const selectedStudentChart = useMemo(() => {
-    if (!selectedStudent || !currentRanking) return null;
+    if (!selectedStudent || !currentRanking || selectedStudent.score == null)
+      return null;
     return {
       data: {
         labels: [selectedStudent.fullName],
@@ -355,12 +365,6 @@ const AdminStudentStats = () => {
           <div>
             <h2 className="fw-bold text-dark mb-1 text-uppercase d-flex align-items-center gap-2">
               Thống kê học sinh
-              {showDemoBadge && (
-                <span className="badge rounded-pill bg-warning-subtle text-warning border border-warning-subtle fs-6 px-3 py-1">
-                  <i className="bi bi-exclamation-triangle-fill me-1"></i> Dữ
-                  liệu mẫu
-                </span>
-              )}
             </h2>
             <div className="small text-muted">
               Chọn lớp bên trái để xem bảng xếp hạng chi tiết của lớp đó (điểm,
@@ -480,7 +484,7 @@ const AdminStudentStats = () => {
                         <div
                           className={`small mt-1 fw-semibold ${active ? "text-white" : "text-dark"}`}
                         >
-                          TB {rank?.avgScore ?? 0}
+                          TB {displayValue(rank?.avgScore)}
                         </div>
                       </div>
                     </div>
@@ -489,7 +493,9 @@ const AdminStudentStats = () => {
               })}
               {filteredClasses.length === 0 && (
                 <div className="text-center py-5 text-muted">
-                  Không tìm thấy lớp phù hợp.
+                  {classesData.length === 0
+                    ? "Chưa có dữ liệu lớp học."
+                    : "Không tìm thấy lớp phù hợp."}
                 </div>
               )}
             </div>
@@ -500,7 +506,9 @@ const AdminStudentStats = () => {
         <div className="col-12 col-xl-9 col-lg-8">
           {!currentRanking ? (
             <div className="card border-0 shadow-sm rounded-5 p-5 text-center text-muted">
-              Chọn một lớp bên trái để xem bảng xếp hạng.
+              {classesData.length === 0
+                ? "Chưa có dữ liệu."
+                : "Chọn một lớp bên trái để xem bảng xếp hạng."}
             </div>
           ) : (
             <div className="d-flex flex-column gap-4">
@@ -545,7 +553,9 @@ const AdminStudentStats = () => {
                         Điểm TB
                       </div>
                       <div className="fw-bold text-primary fs-4">
-                        {currentRanking.avgScore}/10
+                        {currentRanking.avgScore != null
+                          ? `${currentRanking.avgScore}/10`
+                          : "—"}
                       </div>
                     </div>
                   </div>
@@ -555,7 +565,9 @@ const AdminStudentStats = () => {
                         Điểm cao nhất
                       </div>
                       <div className="fw-bold text-success fs-4">
-                        {currentRanking.topScore}/10
+                        {currentRanking.topScore != null
+                          ? `${currentRanking.topScore}/10`
+                          : "—"}
                       </div>
                     </div>
                   </div>
@@ -565,14 +577,15 @@ const AdminStudentStats = () => {
                         Tỷ lệ đạt
                       </div>
                       <div className="fw-bold text-warning-emphasis fs-4">
-                        {currentRanking.rows.length > 0
+                        {currentRanking.scoredRows.length > 0
                           ? formatPercent(
-                              (currentRanking.rows.filter((r) => r.score >= 5)
-                                .length /
-                                currentRanking.rows.length) *
+                              (currentRanking.scoredRows.filter(
+                                (r) => r.score >= 5,
+                              ).length /
+                                currentRanking.scoredRows.length) *
                                 100,
                             )
-                          : "0%"}
+                          : "—"}
                       </div>
                     </div>
                   </div>
@@ -708,20 +721,27 @@ const AdminStudentStats = () => {
                                         : row.rank === 3
                                           ? "#d9480f"
                                           : "#e9ecef",
-                                  color: row.rank <= 3 ? "#fff" : "#495057",
+                                  color:
+                                    row.rank != null && row.rank <= 3
+                                      ? "#fff"
+                                      : "#495057",
                                   fontWeight: 700,
                                 }}
                               >
-                                {row.rank === 1
-                                  ? "🥇"
-                                  : row.rank === 2
-                                    ? "🥈"
-                                    : row.rank === 3
-                                      ? "🥉"
-                                      : `#${row.rank}`}
-                                <span className="ms-1 opacity-75">
-                                  /{row.classSize}
-                                </span>
+                                {row.rank == null
+                                  ? "—"
+                                  : row.rank === 1
+                                    ? "🥇"
+                                    : row.rank === 2
+                                      ? "🥈"
+                                      : row.rank === 3
+                                        ? "🥉"
+                                        : `#${row.rank}`}
+                                {row.rank != null && (
+                                  <span className="ms-1 opacity-75">
+                                    /{row.classSize}
+                                  </span>
+                                )}
                               </span>
                             </td>
                             <td>
@@ -777,12 +797,14 @@ const AdminStudentStats = () => {
                             </td>
                             <td>
                               <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
-                                {row.score}/10
+                                {row.score != null ? `${row.score}/10` : "—"}
                               </span>
                             </td>
                             <td>
                               <span className="badge rounded-pill text-bg-light border px-3 py-2">
-                                Top {formatPercent(row.rankPercentile)}
+                                {row.rankPercentile != null
+                                  ? `Top ${formatPercent(row.rankPercentile)}`
+                                  : "—"}
                               </span>
                             </td>
                           </tr>
@@ -794,7 +816,9 @@ const AdminStudentStats = () => {
                             colSpan={6}
                             className="text-center py-5 text-muted"
                           >
-                            Không tìm thấy học sinh phù hợp.
+                            {currentRanking.rows.length === 0
+                              ? "Chưa có dữ liệu học sinh trong lớp này."
+                              : "Không tìm thấy học sinh phù hợp."}
                           </td>
                         </tr>
                       )}
@@ -842,13 +866,21 @@ const AdminStudentStats = () => {
                         {selectedStudent.scoreLabel}
                       </span>
                       <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
-                        Điểm: {selectedStudent.score}/10
+                        Điểm:{" "}
+                        {selectedStudent.score != null
+                          ? `${selectedStudent.score}/10`
+                          : "—"}
                       </span>
                       <span className="badge rounded-pill text-bg-light border px-3 py-2">
-                        Hạng: {selectedStudent.rank}/{selectedStudent.classSize}
+                        Hạng:{" "}
+                        {selectedStudent.rank != null
+                          ? `${selectedStudent.rank}/${selectedStudent.classSize}`
+                          : "—"}
                       </span>
                       <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-3 py-2">
-                        Top {formatPercent(selectedStudent.rankPercentile)} lớp
+                        {selectedStudent.rankPercentile != null
+                          ? `Top ${formatPercent(selectedStudent.rankPercentile)} lớp`
+                          : "Chưa xếp hạng"}
                       </span>
                     </div>
                   </div>
@@ -886,10 +918,16 @@ const AdminStudentStats = () => {
                                 Xếp hạng
                               </div>
                               <div className="fw-bold text-dark fs-4">
-                                #{selectedStudent.rank}
-                                <small className="text-muted fw-normal">
-                                  /{selectedStudent.classSize}
-                                </small>
+                                {selectedStudent.rank != null ? (
+                                  <>
+                                    #{selectedStudent.rank}
+                                    <small className="text-muted fw-normal">
+                                      /{selectedStudent.classSize}
+                                    </small>
+                                  </>
+                                ) : (
+                                  "—"
+                                )}
                               </div>
                             </div>
                           </div>
@@ -899,7 +937,9 @@ const AdminStudentStats = () => {
                                 Vượt qua
                               </div>
                               <div className="fw-bold text-primary fs-4">
-                                {formatPercent(selectedStudent.rankPercentile)}
+                                {selectedStudent.rankPercentile != null
+                                  ? formatPercent(selectedStudent.rankPercentile)
+                                  : "—"}
                               </div>
                               <div className="small text-muted">
                                 học sinh trong lớp
@@ -915,9 +955,11 @@ const AdminStudentStats = () => {
                                 className="fw-bold fs-4"
                                 style={{ color: selectedStudent.scoreColor }}
                               >
-                                {selectedStudent.score >= 5
-                                  ? "✅ Đạt"
-                                  : "❌ Chưa đạt"}
+                                {selectedStudent.score == null
+                                  ? "Chưa có điểm"
+                                  : selectedStudent.score >= 5
+                                    ? "✅ Đạt"
+                                    : "❌ Chưa đạt"}
                               </div>
                             </div>
                           </div>

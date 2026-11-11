@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Doughnut } from "react-chartjs-2";
 import { Chart as ChartJS, registerables } from "chart.js";
-import { summarizeScoreBuckets } from "../../../utils/statsSeeder";
+import { summarizeScoreBuckets } from "../../../utils/statsUtils";
 
 ChartJS.register(...registerables);
 

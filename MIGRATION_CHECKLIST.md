@@ -45,12 +45,19 @@ Ngoài controller:
 - Tải tài liệu: chặn đường dẫn `../`.
 - Thời gian: phần lẻ giây có tối đa 3 chữ số (bản .NET tới 7).
 
-## Lỗi của bản gốc — hiện vẫn giữ nguyên hành vi (cần quyết định có sửa không)
-Xem danh sách đầy đủ trong lịch sử commit / báo cáo chuyển đổi. Quan trọng nhất:
-- Sửa bài tập (PUT AdminAssignment) khi thêm câu hỏi/lớp mới → 500, không lưu (cờ `EMULATE_EF_NAVIGATION_ADD_BUG` trong `assignments/assignmentsAdmin.ts`).
-- Tìm kiếm bài tập (`?search=`) luôn 500.
-- `Reports/student/dashboard`, `class/{id}/dashboard`: ai đăng nhập cũng xem được dữ liệu của mọi học sinh/lớp.
-- Báo cáo hiện số liệu mẫu bịa ra khi chưa có dữ liệu.
-- `assign-courses`, duyệt/từ chối đổi lịch: không kiểm tra quyền.
-- Thông báo realtime (`NewNotification`, `ScheduleChanged`) không bao giờ được phát.
-- Câu tự luận chưa chấm bị tính là SAI ở trang kết quả.
+## Lỗi của bản gốc đã sửa trong bản Node
+| # | Lỗi bản .NET | Bản Node |
+|---|---|---|
+| 1 | Sửa bài tập thêm câu hỏi / lớp mới → 500, không lưu | Lưu đúng (`EMULATE_EF_NAVIGATION_ADD_BUG = false`) |
+| 2 | Tìm kiếm bài tập (`?search=`) luôn 500 | Tìm theo tên + mô tả, không phân biệt hoa thường |
+| 3 | Ai đăng nhập cũng xem được dashboard mọi học sinh / lớp | Admin; GV chỉ lớp mình dạy; HS chỉ của mình; PH chỉ của con (`reports.access.ts`) |
+| 4 | `GiangVien/assign-courses`, duyệt/từ chối đổi lịch không kiểm tra quyền | Cần `USERS_EDIT` / `SCHEDULE_CHANGE_REQUEST_ADMIN` |
+| 5 | Báo cáo bịa số liệu (backend seeded + frontend "demo universe") | Chỉ số thật; trống → 0 / `null` / "Chưa có dữ liệu"; `admin/student-performance` tính từ điểm + điểm danh thật |
+| 6 | Câu tự luận chưa chấm lưu 0.00 → hiện SAI | Lưu `NULL`, hiện "chờ chấm" (cả bài nộp cũ nhờ `TrangThaiChamTay`) |
+| 7 | Thông báo realtime không bao giờ được gửi | `POST /api/Notification` đẩy `NewNotification` tới đúng người nhận; frontend hiện toast + cập nhật chuông |
+
+## Lỗi của bản gốc còn giữ nguyên (chưa sửa)
+- PUT bài tập không gửi `code` → sinh mã mới (KT-003 thành BT-002).
+- `rooms/create`, `rooms/:id`, `PUT /api/Schedule/:id` chỉ cần đăng nhập (chưa kiểm tra quyền).
+- Sĩ số lớp trong dashboard GV lấy `SiSoHienTai` thay vì đếm ghi danh thật.
+- Một số module bài tập/đề thi ở frontend (AdminAssignment, TeacherExams...) vẫn dùng dữ liệu mock.

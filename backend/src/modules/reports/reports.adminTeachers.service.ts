@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { prisma } from '../../db.js';
 import { attendanceCodesForClasses, calculateAttendanceRate, notDeleted, notInactive, scoresForClasses } from './reports.common.js';
-import { addDays, average, dotnetRound, fmtDate, isNullOrWhiteSpace, seededInt, seededNumber, todayUtc } from './reports.dotnet.js';
+import { average, dotnetRound, fmtDate, isNullOrWhiteSpace, todayUtc } from './reports.dotnet.js';
 
-// GetAdminTeacherDashboardAsync: thong ke ~30 giang vien cho dashboard Admin.
-// DB co it hon 12 GV -> tra 30 GV mau (deterministic, tru TeacherId/ClassId la Guid.NewGuid()).
+// GetAdminTeacherDashboardAsync: thong ke giang vien cho dashboard Admin.
+// Ban .NET BIA so lieu: DB < 12 GV -> 30 GV mau; GV chua co lop -> 2 lop "LH_TEMP_*"; thieu diem danh/diem ->
+// ty le/diem ngau nhien; luon bu cho du 30 GV. Ban Node chi tra GV THAT; chua co du lieu -> null / mang rong.
 
 export interface AdminTeacherClassItemDto {
   classId: string;
@@ -28,8 +28,10 @@ export interface AdminTeacherDashboardRowDto {
   ongoingClasses: number;
   upcomingClasses: number;
   endedClasses: number;
-  avgAttendanceRate: number;
-  avgScore: number;
+  /** null = chua co ban ghi diem danh nao. */
+  avgAttendanceRate: number | null;
+  /** null = chua co bai nop co diem nao. */
+  avgScore: number | null;
   classes: AdminTeacherClassItemDto[];
 }
 
@@ -40,12 +42,13 @@ export interface AdminTeacherSummaryDto {
   avgClassPerTeacher: number;
   avgStudentsPerTeacher: number;
   assignedTeachers: number;
-  topSpecialization: string;
+  topSpecialization: string | null;
 }
 
 export interface AdminTeacherDashboardReportDto {
   summary: AdminTeacherSummaryDto;
   teachers: AdminTeacherDashboardRowDto[];
+  /** Luon false (giu truong de frontend cu khong loi). */
   usesFallback: boolean;
 }
 
@@ -62,88 +65,7 @@ function classifyClassStatus(start: Date | null, end: Date | null): string {
 
 const avgOf = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length; // Average(int) = tong long / dem
 
-function buildFallbackTeachersReport(desiredCount = 30): AdminTeacherDashboardReportDto {
-  const lastNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Phan', 'Vũ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô', 'Dương', 'Lý'];
-  const firstNames = ['Anh', 'Bình', 'Cúc', 'Dung', 'Em', 'Phương', 'Giang', 'Hương', 'Khánh', 'Lan', 'Minh', 'Nam', 'Oanh', 'Phúc', 'Quỳnh', 'Rosa', 'Sơn', 'Thư', 'Uyên', 'Vân', 'Xuân', 'Yến', 'Hải', 'Chi', 'Thảo', 'Trâm', 'Thúy', 'Tú', 'Khoa', 'Lâm'];
-  const degrees = ['ThS.', 'TS.', 'Cử nhân', 'Thạc sĩ'];
-  const specs = ['IELTS', 'TOEIC', 'Tiếng Anh giao tiếp', 'Luyện thi THPT', 'Chuyên Ngữ pháp', 'Chuyên Kỹ năng nói', 'Kid Starter', 'Teen Master'];
-  const classNames = ['LH_IELTS_F01', 'LH_IELTS_F02', 'LH_IELTS_IN01', 'LH_IELTS_IN02', 'LH_TOEIC_500', 'LH_TOEIC_650', 'LH_TOEIC_800', 'LH_TA_SENIOR01', 'LH_TA_JUNIOR02', 'LH_THPT_10A', 'LH_THPT_11B', 'LH_THPT_12C', 'LH_KIDS_01', 'LH_KIDS_02', 'LH_TEEN_03', 'LH_TEEN_04', 'LH_GRAM_F01', 'LH_GRAM_IN01', 'LH_SPEAK_F02', 'LH_WRIT_IN01', 'LH_ENSEED_01', 'LH_ENSEED_02', 'LH_ENSEED_03', 'LH_ENSEED_04'];
-  const courses = ['Khóa IELTS Foundation', 'Khóa IELTS Intensive', 'Khóa TOEIC 500+', 'Khóa TOEIC 650+', 'Khóa Tiếng Anh Giao Tiếp', 'Khóa Luyện Thi THPT', 'Khóa Kid Starter', 'Khóa Teen Master', 'Khóa Chuyên Ngữ Pháp', 'Khóa Kỹ Năng Nói'];
-  const today = todayUtc(); // DateOnly.FromDateTime(DateTime.UtcNow.AddDays(x)) chi lay phan ngay
-
-  const teachers: AdminTeacherDashboardRowDto[] = [];
-  for (let i = 0; i < desiredCount; i++) {
-    const seedKey = `fb-teacher-${i}`;
-    const name = `${lastNames[seededInt(`${seedKey}-last`, 0, lastNames.length - 1)]} ${firstNames[i % firstNames.length]}`;
-    const login = `gv_demo_${String(i + 1).padStart(3, '0')}`;
-    const phone = `09${String(10000000 + seededInt(`${seedKey}-phone`, 0, 89999999)).padStart(8, '0')}`;
-    const degree = degrees[seededInt(`${seedKey}-degree`, 0, degrees.length - 1)];
-    const spec = specs[seededInt(`${seedKey}-spec`, 0, specs.length - 1)];
-    const classCount = seededInt(`${seedKey}-cls`, 2, 6);
-    const classes: AdminTeacherClassItemDto[] = [];
-    let totalStudents = 0;
-    let ongoing = 0;
-    let upcoming = 0;
-    let ended = 0;
-
-    for (let c = 0; c < classCount; c++) {
-      const clsSeed = `${seedKey}-cls-${c}`;
-      const size = seededInt(clsSeed, 14, 38);
-      // `cap` tinh ra nhung khong dung o ban goc.
-      totalStudents += size;
-      const startDate = addDays(today, seededInt(clsSeed, -180, 40));
-      const endDate = addDays(startDate, seededInt(clsSeed, 60, 180));
-      const status = classifyClassStatus(startDate, endDate);
-      if (status === 'ongoing') ongoing++;
-      else if (status === 'upcoming') upcoming++;
-      else ended++;
-      classes.push({
-        classId: randomUUID(),
-        className: classNames[(i * 2 + c) % classNames.length],
-        courseLabel: courses[(i + c * 3) % courses.length],
-        currentSize: size,
-        startDate: fmtDate(startDate),
-        endDate: fmtDate(endDate),
-        status,
-      });
-    }
-
-    teachers.push({
-      teacherId: randomUUID(),
-      name,
-      email: `${login}@qltt.local`,
-      phone,
-      degree,
-      specialization: spec,
-      classCount,
-      totalStudents,
-      ongoingClasses: ongoing,
-      upcomingClasses: upcoming,
-      endedClasses: ended,
-      avgAttendanceRate: dotnetRound(seededNumber(`${seedKey}-att`, 80, 95, 1), 1),
-      avgScore: dotnetRound(seededNumber(`${seedKey}-score`, 6.8, 8.7, 2), 2),
-      classes,
-    });
-  }
-
-  return {
-    summary: {
-      totalTeachers: desiredCount,
-      totalActiveTeachers: desiredCount,
-      totalUnassignedTeachers: 0,
-      avgClassPerTeacher: dotnetRound(avgOf(teachers.map((t) => t.classCount)), 2),
-      avgStudentsPerTeacher: dotnetRound(avgOf(teachers.map((t) => t.totalStudents)), 1),
-      assignedTeachers: desiredCount,
-      topSpecialization: specs[0],
-    },
-    teachers,
-    usesFallback: true,
-  };
-}
-
 export async function getAdminTeacherDashboard(): Promise<AdminTeacherDashboardReportDto> {
-  const DESIRED_TEACHERS = 30;
-  let usesFallback = false;
   const teachers: AdminTeacherDashboardRowDto[] = [];
 
   // Include co loc (filtered include) giong EF; EF sap xep: HoTen, MaGiangVien, roi khoa cac bang con.
@@ -170,12 +92,9 @@ export async function getAdminTeacherDashboard(): Promise<AdminTeacherDashboardR
     orderBy: [{ nguoidung: { HoTen: 'asc' } }, { MaGiangVien: 'asc' }],
   });
 
-  if (dbTeachers.length < 12) return buildFallbackTeachersReport(DESIRED_TEACHERS);
-
-  const today = todayUtc();
   const specFrequency = new Map<string, number>();
 
-  for (const gv of dbTeachers.slice(0, DESIRED_TEACHERS)) {
+  for (const gv of dbTeachers) {
     const classes: AdminTeacherClassItemDto[] = [];
     let totalStudents = 0;
     let ongoing = 0;
@@ -208,68 +127,26 @@ export async function getAdminTeacherDashboard(): Promise<AdminTeacherDashboardR
       });
     }
 
-    if (classes.length === 0) {
-      const seedKey = `gv-fallback-${gv.MaGiangVien}`;
-      for (let c = 0; c < 2; c++) {
-        const clsSeed = `${seedKey}-${c}`;
-        const size = seededInt(clsSeed, 16, 32);
-        totalStudents += size;
-        const start = addDays(today, seededInt(clsSeed, -120, 20));
-        const end = addDays(start, seededInt(clsSeed, 60, 150));
-        const status = classifyClassStatus(start, end);
-        if (status === 'ongoing') ongoing++;
-        else if (status === 'upcoming') upcoming++;
-        else ended++;
-        classes.push({
-          classId: randomUUID(),
-          className: `LH_TEMP_${gv.MaGiangVien.substring(0, 5)}_${c + 1}`,
-          courseLabel: 'Tạm gán khóa học',
-          currentSize: size,
-          startDate: fmtDate(start),
-          endDate: fmtDate(end),
-          status,
-        });
-      }
-      usesFallback = true;
+    let avgAtt: number | null = null;
+    let avgScore: number | null = null;
+    const classIds = [...new Set(classes.filter((c) => c.classId !== EMPTY_GUID).map((c) => c.classId))];
+    if (classIds.length > 0) {
+      const codes = await attendanceCodesForClasses(classIds);
+      if (codes.length > 0) avgAtt = calculateAttendanceRate(codes).presentPercent;
+      const realScores = await scoresForClasses(classIds);
+      if (realScores.length > 0) avgScore = dotnetRound(average(realScores), 2);
     }
 
-    let avgAtt: number;
-    let avgScore: number;
-    const teacherSeedKey = `gv-stats-${gv.MaGiangVien}`;
-    try {
-      const classIds = [...new Set(classes.filter((c) => c.classId !== EMPTY_GUID).map((c) => c.classId))];
-      if (classIds.length > 0) {
-        const codes = await attendanceCodesForClasses(classIds);
-        avgAtt = calculateAttendanceRate(codes, teacherSeedKey, Math.max(80, classIds.length * 30)).presentPercent;
-      } else {
-        avgAtt = dotnetRound(seededNumber(`${teacherSeedKey}-att`, 80, 95, 1), 1);
-        usesFallback = true;
-      }
-
-      const seededAvg = dotnetRound(seededNumber(`${teacherSeedKey}-score`, 6.8, 8.7, 2), 2);
-      if (classIds.length > 0) {
-        const realScores = await scoresForClasses(classIds);
-        avgScore = realScores.length > 0 ? dotnetRound(average(realScores), 2) : seededAvg;
-        if (realScores.length === 0) usesFallback = true;
-      } else {
-        avgScore = seededAvg;
-      }
-    } catch {
-      avgAtt = dotnetRound(seededNumber(`${teacherSeedKey}-att`, 80, 95, 1), 1);
-      avgScore = dotnetRound(seededNumber(`${teacherSeedKey}-score`, 6.8, 8.7, 2), 2);
-      usesFallback = true;
-    }
-
-    let spec: string;
+    // Chua khai bao chuyen mon -> chuoi rong (ban .NET dien nhan "Chuyen mon da nganh" va dem vao thong ke).
+    let spec = '';
     if (!isNullOrWhiteSpace(gv.TrinhDoChuyenMon)) spec = gv.TrinhDoChuyenMon;
     else if (!isNullOrWhiteSpace(gv.HocVi)) spec = gv.HocVi!;
-    else spec = 'Chuyên môn đa ngành';
     if (spec) specFrequency.set(spec, (specFrequency.get(spec) ?? 0) + 1);
 
     teachers.push({
       teacherId: gv.MaGiangVien,
       name: gv.nguoidung?.HoTen ?? `Giảng viên ${gv.MaGiangVien.substring(0, 6)}`,
-      email: gv.nguoidung?.Email ?? `gv_${gv.MaGiangVien.substring(0, 6)}@qltt.local`,
+      email: gv.nguoidung?.Email ?? '', // ban .NET bia email gv_xxx@qltt.local
       phone: gv.SoDienThoai ?? '',
       degree: gv.HocVi ?? '',
       specialization: spec,
@@ -284,14 +161,8 @@ export async function getAdminTeacherDashboard(): Promise<AdminTeacherDashboardR
     });
   }
 
-  const needFill = DESIRED_TEACHERS - teachers.length;
-  if (needFill > 0) {
-    teachers.push(...buildFallbackTeachersReport(needFill).teachers);
-    usesFallback = true;
-  }
-
   // OrderByDescending(Value).First(): sort on dinh -> lay chuyen mon xuat hien nhieu nhat, gap dau tien.
-  let topSpec = 'IELTS';
+  let topSpec: string | null = null;
   let topCount = -1;
   for (const [k, v] of specFrequency) {
     if (v > topCount) {
@@ -300,18 +171,18 @@ export async function getAdminTeacherDashboard(): Promise<AdminTeacherDashboardR
     }
   }
 
-  const hasReal = dbTeachers.length > 0;
+  const avgOrZero = (xs: number[]) => (xs.length > 0 ? avgOf(xs) : 0);
   return {
     summary: {
-      totalTeachers: Math.max(dbTeachers.length, DESIRED_TEACHERS),
+      totalTeachers: dbTeachers.length,
       totalActiveTeachers: teachers.filter((t) => t.ongoingClasses + t.upcomingClasses > 0).length,
-      totalUnassignedTeachers: hasReal ? dbTeachers.filter((g) => g.giangvienlophoc.length === 0).length : 0,
-      avgClassPerTeacher: dotnetRound(avgOf(teachers.map((t) => t.classCount)), 2),
-      avgStudentsPerTeacher: dotnetRound(avgOf(teachers.map((t) => t.totalStudents)), 1),
-      assignedTeachers: hasReal ? dbTeachers.filter((g) => g.giangvienlophoc.length > 0).length : DESIRED_TEACHERS,
+      totalUnassignedTeachers: dbTeachers.filter((g) => g.giangvienlophoc.length === 0).length,
+      avgClassPerTeacher: dotnetRound(avgOrZero(teachers.map((t) => t.classCount)), 2),
+      avgStudentsPerTeacher: dotnetRound(avgOrZero(teachers.map((t) => t.totalStudents)), 1),
+      assignedTeachers: dbTeachers.filter((g) => g.giangvienlophoc.length > 0).length,
       topSpecialization: topSpec,
     },
     teachers,
-    usesFallback,
+    usesFallback: false,
   };
 }

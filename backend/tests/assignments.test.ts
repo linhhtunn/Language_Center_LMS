@@ -319,10 +319,63 @@ describe('bai tap / de thi', () => {
     expect(gone.body.code).toBe('ADMIN_ASSIGNMENT_NOT_FOUND');
   });
 
-  it('tim kiem tren cot json -> 500 nhu ban .NET', async () => {
-    const res = await request(app).get(`${B}/assignments?search=abc`).set(admin);
-    expect(res.status).toBe(500);
-    expect(res.body.code).toBe('SERVER_ERROR');
+  it('tim kiem theo ten va mo ta (ban .NET luon 500 - da sua)', async () => {
+    const res = await request(app)
+      .post(`${B}/assignments`)
+      .set(admin)
+      .send({
+        tenBaiTap: `TEST_ASSIGN_Tim ${RUN}`,
+        moTa: `Ôn tập ThìHiệnTại_${RUN}`,
+        maKhoaHoc: KH,
+        loaiBaiTapCode: 'HOMEWORK',
+        publishMode: 'DRAFT',
+        diemToiDa: 10,
+        selectedClassIds: [],
+      });
+    expect(res.status).toBe(200);
+    const sid = res.body.data.maBaiTap;
+    created.assignments.push(sid);
+    const ids = async (q: string) => {
+      const r = await request(app).get(`${B}/assignments?search=${encodeURIComponent(q)}`).set(admin);
+      expect(r.status).toBe(200);
+      return r.body.data.map((x: { maBaiTap: string }) => x.maBaiTap);
+    };
+
+    expect(await ids(`test_assign_tim ${RUN}`)).toEqual([sid]); // ten, khong phan biet hoa thuong
+    expect(await ids(`thìhiệntại_${RUN}`)).toEqual([sid]); // trong mo ta (cot json), tieng Viet
+    expect(await ids(`khong-co-${RUN}`)).toEqual([]);
+    expect(await ids(`%_${RUN}`)).toEqual([]); // % va _ duoc escape, khong thanh ky tu dai dien
+  });
+
+  it('sua bai them cau hoi + lop moi duoc luu (ban .NET 500, khong luu - da sua)', async () => {
+    const imp = await request(app)
+      .post(`${B}/question-bank/import`)
+      .set(admin)
+      .send({ questions: [{ maKhoaHoc: KH, loaiCauHoiCode: 'CQ_TU_LUAN', mucDoCode: 'CO_BAN', deBai: { html: `TEST_ASSIGN_Sua ${RUN}` } }] });
+    expect(imp.status).toBe(200);
+    const maCauHoi = imp.body.data.importedQuestions[0].maCauHoi as string;
+    expect(maCauHoi).toBeTruthy();
+    created.exercises.push(maCauHoi);
+
+    const base = { tenBaiTap: `TEST_ASSIGN_Sua ${RUN}`, maKhoaHoc: KH, loaiBaiTapCode: 'HOMEWORK', publishMode: 'DRAFT', diemToiDa: 10 };
+    const c = await request(app).post(`${B}/assignments`).set(admin).send({ ...base, selectedClassIds: [], selectedQuestions: [] });
+    expect(c.status).toBe(200);
+    const aid = c.body.data.maBaiTap as string;
+    created.assignments.push(aid);
+    expect(c.body.data).toMatchObject({ totalClasses: 0 });
+
+    const u = await request(app)
+      .put(`${B}/assignments/${aid}`)
+      .set(admin)
+      .send({ ...base, code: c.body.data.code, selectedClassIds: [LOP], selectedQuestions: [{ maCauHoi, thuTu: 1, diemCuaCau: 10 }] });
+    expect(u.status).toBe(200);
+    expect(u.body.data).toMatchObject({ totalClasses: 1, totalStudents: 1 });
+
+    const detail = await request(app).get(`${B}/assignments/${aid}`).set(admin);
+    expect(detail.body.data.selectedClassIds).toEqual([LOP]);
+    expect(detail.body.data.selectedQuestions.map((q: { maCauHoi: string }) => q.maCauHoi)).toEqual([maCauHoi]);
+    expect(await prisma.baitapcauhoi.count({ where: { MaBaiTap: aid } })).toBe(1);
+    expect(await prisma.sukienlophoc.count({ where: { MaBaiTap: aid, MaLopHoc: LOP, OR: [{ DaXoa: null }, { DaXoa: false }] } })).toBe(1);
   });
 });
 

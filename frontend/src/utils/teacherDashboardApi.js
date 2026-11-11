@@ -3,7 +3,7 @@
 // biểu đồ (ClassStatsTab, ExamStatsTab, ExamDetailPanel, CompletedClassesResultChart...)
 // không cần sửa gì.
 import { p0Api } from "../api/p0Api";
-import { getClassStatus } from "./statsSeeder";
+import { getClassStatus } from "./statsUtils";
 
 export const loadTeacherClasses = async () => {
   const classes = await p0Api.classes.assignedToMe();

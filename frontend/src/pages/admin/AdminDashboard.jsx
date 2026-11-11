@@ -11,7 +11,6 @@ import {
   DATE_PRESETS,
   startOfDay,
   endOfDay,
-  addDays,
   startOfWeek,
   endOfWeek,
   startOfMonth,
@@ -26,14 +25,9 @@ import {
   formatDateVN,
   formatPercent,
   unwrapApiData,
-  hashSeed,
-  seededNumber,
-  buildDemoRosterForClassV2 as buildDemoRosterForClass,
-  buildDemoUniverse,
   SCHEDULE_SLOTS,
   parseClock,
   computeSessionStatus,
-  buildDemoTodaySchedule,
   getClassStatus,
   doesOverlapRange,
   wrapChartAxisLabel,
@@ -41,9 +35,9 @@ import {
   buildFocusedGroupedBarOptions,
   buildContinuousBins,
   buildIntegerBins,
-  buildTeacherDemoEmail,
-} from "../../utils/statsSeeder";
+} from "../../utils/statsUtils";
 import { SourceBadge } from "../../components/SharedComponents";
+import { onNewNotification } from '../../components/RealtimeNotifications';
 
 ChartJS.register(...registerables);
 
@@ -81,9 +75,12 @@ const AdminDashboard = () => {
     overview: "real",
     schedule: "real",
     attendance: "real",
-    studentPerformance: "hybrid",
-    classAnalytics: "hybrid",
+    studentPerformance: "real",
+    classAnalytics: "real",
   });
+
+  // Thong bao moi (realtime) -> cap nhat so chua doc tren chuong ngay.
+  useEffect(() => onNewNotification(() => fetchUnreadCount()), []);
 
   const fetchUnreadCount = async () => {
     try {
@@ -191,66 +188,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const buildDemoAttendanceRows = (classes, rangeStart, rangeEnd) => {
-    const timeSlots = [
-      "07:00 - 08:45",
-      "08:50 - 10:40",
-      "13:25 - 15:10",
-      "17:30 - 19:15",
-    ];
-    const visible = classes
-      .filter((item) =>
-        doesOverlapRange(item.startDate, item.endDate, rangeStart, rangeEnd),
-      )
-      .slice(0, 10);
-
-    const sourceRows =
-      visible.length >= 10
-        ? visible
-        : (() => {
-            const demoClasses = buildDemoUniverse(
-              rangeStart || new Date(),
-            ).classes;
-            const merged = [...visible];
-            demoClasses.forEach((item) => {
-              if (
-                merged.length < 10 &&
-                !merged.some((current) => current.name === item.name)
-              ) {
-                merged.push(item);
-              }
-            });
-            return merged.slice(0, 10);
-          })();
-
-    return sourceRows.map((item, index) => {
-      const baseDate = parseApiDate(item.startDate) || rangeStart || new Date();
-      const date = addDays(baseDate, index % 4);
-      const total = Math.max(item.currentSize || 0, 1);
-      const present = Math.min(
-        total,
-        Math.max(
-          0,
-          Math.round(total - seededNumber(`${item.id}-present`, 0, 3, 0)),
-        ),
-      );
-      return {
-        id: `${item.id}-${index}`,
-        classCode: item.name,
-        courseName:
-          item.courses?.map((course) => course.name).join(", ") ||
-          "Chưa gán khóa",
-        teacher:
-          item.teachers?.[0]?.name || "Chưa phân công",
-        date: formatDateVN(date),
-        time: timeSlots[index % timeSlots.length],
-        present,
-        total,
-        status: present > 0 ? "Đã điểm danh" : "Chưa điểm danh",
-      };
-    });
-  };
-
   const loadCoreDashboard = async ({ silent = false } = {}) => {
     if (!silent) {
       setCoreLoading(true);
@@ -272,33 +209,26 @@ const AdminDashboard = () => {
 
       const nextWarnings = [];
       const nextSources = {
-        overview: reportResult.status === "fulfilled" ? "real" : "hybrid",
+        overview: reportResult.status === "fulfilled" ? "real" : "error",
         schedule: dataSources.schedule,
         attendance: dataSources.attendance,
         studentPerformance:
-          studentPerfResult.status === "fulfilled" &&
-          Array.isArray(studentPerfResult.value?.performanceRows) &&
-          studentPerfResult.value.performanceRows.length > 0
-            ? "real"
-            : "hybrid",
+          studentPerfResult.status === "fulfilled" ? "real" : "error",
         teacherDashboard:
-          teacherDashResult.status === "fulfilled" &&
-          Array.isArray(teacherDashResult.value?.teachers) &&
-          teacherDashResult.value.teachers.length > 0
-            ? teacherDashResult.value.usesFallback ? "hybrid" : "real"
-            : "hybrid",
-        classAnalytics: "real",
+          teacherDashResult.status === "fulfilled" ? "real" : "error",
+        classAnalytics:
+          studentPerfResult.status === "fulfilled" ? "real" : "error",
       };
 
-      let nextReport =
+      const nextReport =
         reportResult.status === "fulfilled" ? reportResult.value : null;
-      let nextClasses =
-        classesResult.status === "fulfilled" ? classesResult.value : [];
-      let nextCourses =
-        coursesResult.status === "fulfilled" ? coursesResult.value : [];
-      let nextStudentPerf =
+      const nextClasses =
+        classesResult.status === "fulfilled" ? classesResult.value || [] : [];
+      const nextCourses =
+        coursesResult.status === "fulfilled" ? coursesResult.value || [] : [];
+      const nextStudentPerf =
         studentPerfResult.status === "fulfilled" ? studentPerfResult.value : null;
-      let nextTeacherDash =
+      const nextTeacherDash =
         teacherDashResult.status === "fulfilled" ? teacherDashResult.value : null;
 
       if (reportResult.status !== "fulfilled") {
@@ -315,82 +245,32 @@ const AdminDashboard = () => {
 
       if (studentPerfResult.status !== "fulfilled") {
         nextWarnings.push(
-          "Thống kê học sinh đang kết hợp dữ liệu mẫu vì API thống kê chi tiết theo từng học sinh chưa tải xong.",
-        );
-      } else if (
-        nextSources.studentPerformance === "hybrid" &&
-        !(
-          nextClasses.length === 0 &&
-          nextCourses.length === 0 &&
-          (nextReport?.totalStudents ?? 0) === 0 &&
-          (nextReport?.totalClasses ?? 0) === 0 &&
-          (nextReport?.totalCourses ?? 0) === 0
-        )
-      ) {
-        nextWarnings.push(
-          "Thống kê học sinh dùng danh sách lớp và học sinh thật, điểm số và tỷ lệ vắng đang hiển thị mẫu (BE chưa có điểm/chuyên cần thật).",
+          "Không tải được thống kê điểm và chuyên cần theo học sinh, biểu đồ của từng lớp sẽ để trống.",
         );
       }
 
+      if (teacherDashResult.status !== "fulfilled") {
+        nextWarnings.push(
+          "Không tải được thống kê giảng viên, danh sách giảng viên đang tổng hợp từ danh sách lớp học.",
+        );
+      }
+
+      // Danh sách học viên thật của từng lớp; lớp chưa có học viên thì để rỗng.
       const studentEntries = {};
-
-      const totals = {
-        students: nextReport?.totalStudents ?? 0,
-        classes: nextReport?.totalClasses ?? 0,
-        courses: nextReport?.totalCourses ?? 0,
-      };
-
-      const isEmptySystem =
-        nextClasses.length === 0 &&
-        nextCourses.length === 0 &&
-        totals.students === 0 &&
-        totals.classes === 0 &&
-        totals.courses === 0;
-
-      if (isEmptySystem) {
-        const demo = buildDemoUniverse(new Date());
-        nextReport = demo.report;
-        nextClasses = demo.classes;
-        nextCourses = demo.courses;
-        Object.assign(studentEntries, demo.studentsByClass);
-        nextSources.overview = "hybrid";
-        nextSources.schedule = "hybrid";
-        nextSources.studentPerformance = "hybrid";
-        nextSources.classAnalytics = "hybrid";
-        nextWarnings.push(
-          "Hệ thống đang trống dữ liệu, dashboard hiển thị dữ liệu mẫu (deterministic) để trực quan hơn.",
-        );
-      }
-
-      if (nextClasses.length > 0 && Object.keys(studentEntries).length === 0) {
-        let missing = 0;
-        nextClasses.forEach((cls) => {
-          if (Array.isArray(cls.students) && cls.students.length > 0) {
-            studentEntries[cls.id] = cls.students.map((st) => ({
+      nextClasses.forEach((cls) => {
+        studentEntries[cls.id] = Array.isArray(cls.students)
+          ? cls.students.map((st) => ({
               id: st.studentId,
+              studentId: st.studentId,
               userId: st.userId,
               name: st.fullName,
+              fullName: st.fullName,
               email: st.email,
               joinedAt: st.joinedAt,
               active: st.active,
-            }));
-          } else {
-            missing += 1;
-            studentEntries[cls.id] = buildDemoRosterForClass(
-              cls.id,
-              cls.currentSize,
-            );
-          }
-        });
-
-        if (missing > 0) {
-          nextSources.studentPerformance = "hybrid";
-          nextSources.classAnalytics = "hybrid";
-          nextWarnings.push(
-            `Có ${missing} lớp chưa có danh sách học viên, tab học sinh sẽ hiển thị một phần dữ liệu mẫu.`,
-          );
-        }
-      }
+            }))
+          : [];
+      });
 
       setReportData(nextReport);
       setClassesData(nextClasses);
@@ -437,46 +317,16 @@ const AdminDashboard = () => {
           }))
         : [];
 
-      const demoSupplement = buildDemoAttendanceRows(
-        classesData.length > 0
-          ? classesData
-          : buildDemoUniverse(new Date()).classes,
-        parseApiDate(dateRange.from),
-        parseApiDate(dateRange.to),
-      );
-      const mergedRows = [...normalizedRows];
-      demoSupplement.forEach((row) => {
-        if (
-          mergedRows.length < 10 &&
-          !mergedRows.some(
-            (current) =>
-              current.teacher === row.teacher &&
-              current.classCode === row.classCode,
-          )
-        ) {
-          mergedRows.push(row);
-        }
-      });
-
-      setAttendanceRows(mergedRows.slice(0, 10));
+      setAttendanceRows(normalizedRows.slice(0, 10));
       setDataSources((current) => ({
         ...current,
-        attendance:
-          mergedRows.length > normalizedRows.length ? "hybrid" : "real",
+        attendance: "real",
       }));
     } catch {
-      const rangeStart = parseApiDate(dateRange.from);
-      const rangeEnd = parseApiDate(dateRange.to);
-      const classesForDemo =
-        classesData.length > 0
-          ? classesData
-          : buildDemoUniverse(new Date()).classes;
-      setAttendanceRows(
-        buildDemoAttendanceRows(classesForDemo, rangeStart, rangeEnd),
-      );
+      setAttendanceRows([]);
       setDataSources((current) => ({
         ...current,
-        attendance: "hybrid",
+        attendance: "error",
       }));
     } finally {
       setAttendanceLoading(false);
@@ -549,37 +399,11 @@ const AdminDashboard = () => {
             (left.startAt?.getTime() || 0) - (right.startAt?.getTime() || 0),
         );
 
-      if (rows.length === 0) {
-        const demoClasses =
-          classesData.length > 0 ? classesData : buildDemoUniverse(now).classes;
-        const demoRows = buildDemoTodaySchedule(demoClasses, now).map(
-          (row) => ({
-            ...row,
-            status: computeSessionStatus(
-              { startAt: row.startAt, endAt: row.endAt },
-              now,
-            ),
-          }),
-        );
-        setTodaySchedule(demoRows);
-        setDataSources((current) => ({ ...current, schedule: "hybrid" }));
-      } else {
-        setTodaySchedule(rows);
-        setDataSources((current) => ({ ...current, schedule: "real" }));
-      }
+      setTodaySchedule(rows);
+      setDataSources((current) => ({ ...current, schedule: "real" }));
     } catch {
-      const now = new Date();
-      const demoClasses =
-        classesData.length > 0 ? classesData : buildDemoUniverse(now).classes;
-      const demoRows = buildDemoTodaySchedule(demoClasses, now).map((row) => ({
-        ...row,
-        status: computeSessionStatus(
-          { startAt: row.startAt, endAt: row.endAt },
-          now,
-        ),
-      }));
-      setTodaySchedule(demoRows);
-      setDataSources((current) => ({ ...current, schedule: "hybrid" }));
+      setTodaySchedule([]);
+      setDataSources((current) => ({ ...current, schedule: "error" }));
     } finally {
       setTodayScheduleLoading(false);
     }
@@ -700,24 +524,13 @@ const AdminDashboard = () => {
     studentsByClass,
   ]);
 
-  const overviewDemoCharts = useMemo(() => {
-    const demoUniverse = buildDemoUniverse(new Date());
-    const sourceClasses =
-      classRows.length > 0 ? classRows : demoUniverse.classes;
-    const sourceStudentsByClass =
-      classRows.length > 0 ? studentsByClass : demoUniverse.studentsByClass;
+  const overviewCharts = useMemo(() => {
     const studentParticipationMap = new Map();
 
-    sourceClasses.forEach((cls) => {
-      const roster =
-        (sourceStudentsByClass[cls.id] || []).length > 0
-          ? sourceStudentsByClass[cls.id]
-          : buildDemoRosterForClass(cls.id, cls.currentSize);
-
-      roster.forEach((student) => {
-        const studentId =
-          student.studentId ||
-          `${student.fullName || "hoc-vien"}-${student.email || cls.id}`;
+    classRows.forEach((cls) => {
+      (studentsByClass[cls.id] || []).forEach((student) => {
+        const studentId = student.studentId ?? student.id;
+        if (studentId == null) return;
         const currentCount = studentParticipationMap.get(studentId) || 0;
         studentParticipationMap.set(studentId, currentCount + 1);
       });
@@ -740,61 +553,28 @@ const AdminDashboard = () => {
       }
     });
 
-    const shouldUseVisualDemoDistribution =
-      classRows.length === 0 ||
-      ((classSizeBuckets[0].count === 0 && classSizeBuckets[1].count === 0 && classSizeBuckets[2].count === 0));
-    const visualDemoBase = Math.max(reportData?.totalStudents || 0, 1000);
-
-    if (shouldUseVisualDemoDistribution) {
-      classSizeBuckets[0].count = Math.round(visualDemoBase * 0.48);
-      classSizeBuckets[1].count = Math.round(visualDemoBase * 0.34);
-      classSizeBuckets[2].count =
-        visualDemoBase - classSizeBuckets[0].count - classSizeBuckets[1].count;
-    }
-
     const classSizeSummary = classSizeBuckets.map((item) => ({
       ...item,
-      percent:
-        classSizeBuckets[0].count +
-        classSizeBuckets[1].count +
-        classSizeBuckets[2].count
-          ? Number(
-              (
-                (item.count /
-                  (classSizeBuckets[0].count +
-                    classSizeBuckets[1].count +
-                    classSizeBuckets[2].count)) *
-                100
-              ).toFixed(1),
-            )
-          : 0,
+      percent: totalTrackedStudents
+        ? Number(((item.count / totalTrackedStudents) * 100).toFixed(1))
+        : 0,
     }));
 
-    const attendanceReal = reportData?.attendanceRate || null;
-    const attendanceHasReal =
-      attendanceReal &&
-      (attendanceReal.present || attendanceReal.absent || attendanceReal.late || attendanceReal.excused);
-    const attendanceVisualBase = Math.max(
-      (attendanceReal?.present || 0) + (attendanceReal?.absent || 0) + (attendanceReal?.late || 0) + (attendanceReal?.excused || 0),
-      classRows.length * 40 || 0,
-      400
-    );
-    const attendanceFallbackSeed = [
-      Math.round(attendanceVisualBase * 0.88),
-      Math.round(attendanceVisualBase * 0.08),
-      Math.round(attendanceVisualBase * 0.032),
-      Math.max(0, Math.round(attendanceVisualBase * 0.008)),
-    ];
+    const attendanceReal = reportData?.attendanceRate || {};
     const attendanceBars = [
-      { label: "Có mặt", count: attendanceHasReal ? (attendanceReal.present || 0) : attendanceFallbackSeed[0], color: "#42c6b8" },
-      { label: "Đi muộn", count: attendanceHasReal ? (attendanceReal.late || 0) : attendanceFallbackSeed[1], color: "#ffb347" },
-      { label: "Vắng mặt", count: attendanceHasReal ? (attendanceReal.absent || 0) : attendanceFallbackSeed[2], color: "#ef476f" },
-      { label: "Vắng có phép", count: attendanceHasReal ? (attendanceReal.excused || 0) : attendanceFallbackSeed[3], color: "#9b5de5" },
+      { label: "Có mặt", count: Number(attendanceReal.present) || 0, color: "#42c6b8" },
+      { label: "Đi muộn", count: Number(attendanceReal.late) || 0, color: "#ffb347" },
+      { label: "Vắng mặt", count: Number(attendanceReal.absent) || 0, color: "#ef476f" },
+      { label: "Vắng có phép", count: Number(attendanceReal.excused) || 0, color: "#9b5de5" },
     ];
     const attendanceTotal = attendanceBars.reduce(
       (sum, item) => sum + item.count,
       0,
     );
+    const attendancePercent = (count) =>
+      attendanceTotal > 0
+        ? Number(((count / attendanceTotal) * 100).toFixed(1))
+        : 0;
 
     const classRangeBars = [
       { label: "Lớp sĩ số <10", count: 0, color: "#4ea8de" },
@@ -812,25 +592,6 @@ const AdminDashboard = () => {
         classRangeBars[2].count += 1;
       }
     });
-
-    const classRangeRealTotal = classRangeBars.reduce(
-      (sum, item) => sum + item.count,
-      0,
-    );
-    const classRangeSeedKey = `${rangeStart?.toISOString?.() || "no-start"}-${rangeEnd?.toISOString?.() || "no-end"}-${filteredClasses.length}`;
-    const classRangeVisualTargets = [
-      seededNumber(`${classRangeSeedKey}-small`, 8, 18, 0),
-      seededNumber(`${classRangeSeedKey}-medium`, 7, 15, 0),
-      seededNumber(`${classRangeSeedKey}-large`, 4, 12, 0),
-    ];
-    const classRangeNeedsVisualDemo =
-      classRangeRealTotal === 0;
-
-    if (classRangeNeedsVisualDemo) {
-      classRangeBars.forEach((item, index) => {
-        item.count = Math.max(item.count, classRangeVisualTargets[index]);
-      });
-    }
 
     const classRangeTotal = classRangeBars.reduce(
       (sum, item) => sum + item.count,
@@ -869,14 +630,10 @@ const AdminDashboard = () => {
           ],
         },
         summary: classSizeSummary,
-        totalTrackedStudents: classSizeSummary.reduce(
-          (sum, item) => sum + item.count,
-          0,
-        ),
-        totalStudentsInSystem: shouldUseVisualDemoDistribution
-          ? visualDemoBase
-          : (reportData?.totalStudents ?? totalTrackedStudents),
-        usesVisualDemoDistribution: shouldUseVisualDemoDistribution,
+        totalTrackedStudents,
+        totalStudentsInSystem:
+          reportData?.totalStudents ?? totalTrackedStudents,
+        hasData: totalTrackedStudents > 0,
       },
       attendance: {
         data: {
@@ -891,9 +648,7 @@ const AdminDashboard = () => {
             },
             {
               label: "Tỷ lệ (%) trên tổng điểm danh",
-              data: attendanceBars.map((item) =>
-                Number(((item.count / attendanceTotal) * 100).toFixed(1)),
-              ),
+              data: attendanceBars.map((item) => attendancePercent(item.count)),
               backgroundColor: attendanceBars.map((item) => `${item.color}22`),
               borderColor: attendanceBars.map((item) => item.color),
               borderWidth: 2,
@@ -905,8 +660,9 @@ const AdminDashboard = () => {
         summary: attendanceBars.map((item) => ({
           label: item.label,
           count: item.count,
-          percent: Number(((item.count / attendanceTotal) * 100).toFixed(1)),
+          percent: attendancePercent(item.count),
         })),
+        hasData: attendanceTotal > 0,
       },
       classRange: {
         data: {
@@ -949,18 +705,10 @@ const AdminDashboard = () => {
             ((item.count / Math.max(classRangeTotal, 1)) * 100).toFixed(1),
           ),
         })),
-        realTotal: classRangeRealTotal,
-        usesVisualDemoDistribution: classRangeNeedsVisualDemo,
+        hasData: classRangeTotal > 0,
       },
     };
-  }, [
-    classRows,
-    filteredClasses,
-    rangeEnd,
-    rangeStart,
-    reportData,
-    studentsByClass,
-  ]);
+  }, [classRows, filteredClasses, reportData, studentsByClass]);
 
   const teacherStats = useMemo(() => {
     const resolveStatusInfo = (statusKey) => {
@@ -986,8 +734,7 @@ const AdminDashboard = () => {
 
     if (
       teacherDashboardData &&
-      Array.isArray(teacherDashboardData.teachers) &&
-      teacherDashboardData.teachers.length > 0
+      Array.isArray(teacherDashboardData.teachers)
     ) {
       return teacherDashboardData.teachers
         .map((gv) => {
@@ -1003,7 +750,7 @@ const AdminDashboard = () => {
           return {
             id: gv.teacherId,
             name: gv.name,
-            email: gv.email || buildTeacherDemoEmail(gv.name),
+            email: gv.email || "",
             phone: gv.phone || "",
             degree: gv.degree || "",
             specialization: gv.specialization || "",
@@ -1025,23 +772,7 @@ const AdminDashboard = () => {
     }
 
     const teacherMap = new Map();
-    const sourceClasses =
-      classRows.length > 0
-        ? classRows
-        : buildDemoUniverse(new Date()).classes.map((cls) => ({
-            ...cls,
-            courseLabel:
-              cls.courses?.map((course) => course.name).join(", ") ||
-              "Chưa gán khóa học",
-            teacherLabel:
-              cls.teachers?.map((teacher) => teacher.name).join(", ") ||
-              "Chưa phân công",
-            status: getClassStatus(cls.startDate, cls.endDate, new Date()),
-            startDateParsed: parseApiDate(cls.startDate),
-            endDateParsed: parseApiDate(cls.endDate),
-          }));
-
-    sourceClasses.forEach((cls) => {
+    classRows.forEach((cls) => {
       const teachers = cls.teachers?.length
         ? cls.teachers
         : [{ id: `unassigned-${cls.id}`, name: "Chưa phân công" }];
@@ -1050,7 +781,7 @@ const AdminDashboard = () => {
           teacherMap.set(teacher.id, {
             id: teacher.id,
             name: teacher.name,
-            email: buildTeacherDemoEmail(teacher.name),
+            email: "",
             classes: [],
             totalStudents: 0,
             ongoing: 0,
@@ -1086,92 +817,49 @@ const AdminDashboard = () => {
   const studentAnalytics = useMemo(() => {
     const studentMap = new Map();
     const performanceRows = [];
-    const demoUniverse = buildDemoUniverse(new Date());
+    const toNumberOrNull = (value) =>
+      value != null && Number.isFinite(Number(value)) ? Number(value) : null;
 
-    // Lookup classRows (đã có displayName tiếng Anh + courseLabel tiếng Anh) theo classId
-    const classRowLookup = new Map();
-    if (classRows && classRows.length > 0) {
-      classRows.forEach((cls) => classRowLookup.set(cls.id, cls));
-    }
-
-    // Lookup BE performance rows thật (dễ mở rộng sau này: BE chỉ cần điền Score/Rank/...)
+    // Số liệu thật theo từng học sinh trong lớp từ BE (score/absenceRate có thể null = chưa có dữ liệu)
+    const bePerfRows = Array.isArray(studentPerformanceData?.performanceRows)
+      ? studentPerformanceData.performanceRows
+      : [];
     const bePerfLookup = new Map(); // key: `${classId}-${studentId}` → value
-    let hasRealTopLearners = false;
-    if (
-      studentPerformanceData &&
-      Array.isArray(studentPerformanceData.performanceRows) &&
-      studentPerformanceData.performanceRows.length > 0
-    ) {
-      studentPerformanceData.performanceRows.forEach((row) => {
-        if (row.classId && row.studentId) {
-          bePerfLookup.set(`${row.classId}-${row.studentId}`, row);
-        }
-      });
-    }
-    const beTopLearners =
-      Array.isArray(studentPerformanceData?.topLearners) &&
-      studentPerformanceData.topLearners.length > 0
-        ? studentPerformanceData.topLearners
-        : null;
-    hasRealTopLearners = !!beTopLearners;
+    bePerfRows.forEach((row) => {
+      if (row.classId != null && row.studentId != null) {
+        bePerfLookup.set(`${row.classId}-${row.studentId}`, row);
+      }
+    });
+    const beTopLearners = Array.isArray(studentPerformanceData?.topLearners)
+      ? studentPerformanceData.topLearners
+      : null;
 
-    const sourceClasses =
-      classRows.length > 0
-        ? classRows
-        : demoUniverse.classes.map((cls) => ({
-            ...cls,
-            displayName: resolveClassDisplayName(cls.name),
-            courseLabel:
-              resolveCourseDisplayNames(cls.courses) ||
-              "Chưa gán khóa học",
-            startDateParsed: parseApiDate(cls.startDate),
-            endDateParsed: parseApiDate(cls.endDate),
-            status: getClassStatus(cls.startDate, cls.endDate, new Date()),
-          }));
-    const sourceStudentsByClass =
-      classRows.length > 0 ? studentsByClass : demoUniverse.studentsByClass;
-
-    sourceClasses.forEach((cls) => {
-      // 1. Roster HS thật (studentsByClass map từ ClassesController list, 100% học sinh DB thật) nếu có
+    classRows.forEach((cls) => {
+      // Roster HS thật của lớp; nếu danh sách lớp không kèm học viên thì lấy theo báo cáo BE.
+      const classRoster = studentsByClass[cls.id] || [];
       const roster =
-        (sourceStudentsByClass[cls.id] || []).length > 0
-          ? sourceStudentsByClass[cls.id]
-          : buildDemoRosterForClass(cls.id, cls.currentSize);
+        classRoster.length > 0
+          ? classRoster
+          : bePerfRows
+              .filter((row) => String(row.classId) === String(cls.id))
+              .map((row) => ({
+                studentId: row.studentId,
+                fullName: row.studentName,
+                email: row.email,
+              }));
 
-      // 2. Build danh sách scoredRows theo từng học sinh
       const rawRows = roster.map((student) => {
         const studentId = student.studentId ?? student.id;
         const beRow = bePerfLookup.get(`${cls.id}-${studentId}`);
-        const classLookupRow = classRowLookup.get(cls.id) || cls;
 
-        // Total sessions: có BE thật thì dùng, không thì fallback hybrid seeded
-        const totalSessions =
-          beRow?.totalSessions ??
-          Math.max(8, seededNumber(`${cls.id}-sessions`, 8, 20, 0));
-
-        // Score: có BE thật thì dùng, không thì fallback hybrid seeded
-        const score =
-          beRow?.score != null
-            ? Number(beRow.score)
-            : seededNumber(`${studentId}-${cls.id}-score`, 4.2, 9.8, 1);
-
-        // Absence: có BE thật thì dùng, không thì fallback hybrid seeded
-        let absenceCount = beRow?.absenceCount;
-        if (absenceCount == null) {
-          absenceCount = seededNumber(
-            `${studentId}-${cls.id}-absence`,
-            0,
-            Math.min(totalSessions, 6),
-            0,
-          );
-        }
+        const score = toNumberOrNull(beRow?.score);
+        const totalSessions = toNumberOrNull(beRow?.totalSessions);
+        const absenceCount = toNumberOrNull(beRow?.absenceCount);
         const absenceRate =
-          beRow?.absenceRate != null
-            ? Number(beRow.absenceRate)
-            : Number(((absenceCount / Math.max(totalSessions, 1)) * 100).toFixed(1));
-
-        // Class size: có BE thật thì dùng, không thì classLookupRow.currentSize
-        const classSize = beRow?.classSize ?? classLookupRow.currentSize ?? roster.length;
+          toNumberOrNull(beRow?.absenceRate) ??
+          (absenceCount != null && totalSessions > 0
+            ? Number(((absenceCount / totalSessions) * 100).toFixed(1))
+            : null);
 
         return {
           student: {
@@ -1180,16 +868,17 @@ const AdminDashboard = () => {
             email: student.email ?? beRow?.email ?? "",
           },
           score,
-          absenceCount: Number(absenceCount),
+          absenceCount,
           totalSessions,
           absenceRate,
-          classSize,
-          _rankBe: beRow?.rank ?? null,
+          classSize: beRow?.classSize ?? cls.currentSize ?? roster.length,
+          _rankBe: toNumberOrNull(beRow?.rank),
         };
       });
 
-      // Sort + rank (nếu BE rank không null thì giữ nguyên BE rank)
+      // Chỉ xếp hạng học sinh có điểm thật; học sinh chưa có điểm không có hạng.
       const scoredRows = rawRows
+        .filter((row) => row.score != null)
         .sort((left, right) => {
           if (left._rankBe != null && right._rankBe != null) return left._rankBe - right._rankBe;
           return (
@@ -1197,32 +886,26 @@ const AdminDashboard = () => {
             (left.student?.fullName || "").localeCompare(right.student?.fullName || "")
           );
         })
-        .map((row, index, list) => ({
-          student: row.student,
-          score: row.score,
-          absenceCount: row.absenceCount,
-          totalSessions: row.totalSessions,
-          absenceRate: row.absenceRate,
-          rank: row._rankBe != null ? Number(row._rankBe) : index + 1,
-          classSize: row.classSize || list.length || 1,
+        .map((row, index) => ({
+          ...row,
+          rank: row._rankBe ?? index + 1,
         }));
+      const unscoredRows = rawRows
+        .filter((row) => row.score == null)
+        .map((row) => ({ ...row, rank: null }));
 
-      const classLookupRow = classRowLookup.get(cls.id) || cls;
-      // displayName tiếng Anh đã resolve sẵn trong classRows
-      const classDisplayName = classLookupRow.displayName || cls.name || "Lớp học";
-      // courseLabel tiếng Anh đã resolve sẵn trong classRows
-      const classCourseLabel =
-        classLookupRow.courseLabel ||
-        (cls.courses ? resolveCourseDisplayNames(cls.courses) : "") ||
-        "Chưa gán khóa học";
+      // displayName / courseLabel tiếng Anh đã resolve sẵn trong classRows
+      const classDisplayName = cls.displayName || cls.name || "Lớp học";
+      const classCourseLabel = cls.courseLabel || "Chưa gán khóa học";
 
-      scoredRows.forEach((row) => {
+      [...scoredRows, ...unscoredRows].forEach((row) => {
         if (!studentMap.has(row.student.studentId)) {
           studentMap.set(row.student.studentId, {
             studentId: row.student.studentId,
             fullName: row.student.fullName,
             email: row.student.email,
             classCount: 0,
+            scoredClassCount: 0,
             scoreSum: 0,
             courseNames: new Set(),
             classResults: [],
@@ -1231,14 +914,17 @@ const AdminDashboard = () => {
 
         const studentEntry = studentMap.get(row.student.studentId);
         studentEntry.classCount += 1;
-        studentEntry.scoreSum += row.score;
+        if (row.score != null) {
+          studentEntry.scoredClassCount += 1;
+          studentEntry.scoreSum += row.score;
+        }
         if (classCourseLabel && classCourseLabel !== "Chưa gán khóa học") {
           studentEntry.courseNames.add(classCourseLabel);
         }
         studentEntry.classResults.push({
           classId: cls.id,
-          className: classDisplayName, // ✅ tiếng Anh, không còn LH_ENSEED_xx_YYYY
-          courseLabel: classCourseLabel, // ✅ tiếng Anh đã resolve
+          className: classDisplayName,
+          courseLabel: classCourseLabel,
           score: row.score,
           rank: row.rank,
           classSize: row.classSize,
@@ -1248,7 +934,7 @@ const AdminDashboard = () => {
 
         performanceRows.push({
           classId: cls.id,
-          className: classDisplayName, // ✅ tiếng Anh
+          className: classDisplayName,
           studentId: row.student.studentId,
           studentName: row.student.fullName,
           score: row.score,
@@ -1260,44 +946,42 @@ const AdminDashboard = () => {
       });
     });
 
-    // 3. Danh sách học sinh tổng hợp + top learners
-    let students = Array.from(studentMap.values())
+    // Danh sách học sinh tổng hợp; điểm TB chỉ tính trên các lớp đã có điểm thật.
+    const students = Array.from(studentMap.values())
       .map((student) => ({
         ...student,
-        averageScore: Number(
-          (student.scoreSum / Math.max(student.classCount, 1)).toFixed(1),
-        ),
+        averageScore:
+          student.scoredClassCount > 0
+            ? Number((student.scoreSum / student.scoredClassCount).toFixed(1))
+            : null,
         courseCount: student.courseNames.size,
         courses: Array.from(student.courseNames),
       }))
       .sort(
         (left, right) =>
-          right.averageScore - left.averageScore ||
+          (right.averageScore ?? -1) - (left.averageScore ?? -1) ||
           right.classCount - left.classCount ||
           (left.fullName || "").localeCompare(right.fullName || ""),
       )
       .map((student, index) => ({
         ...student,
-        globalRank: index + 1,
+        globalRank: student.averageScore != null ? index + 1 : null,
       }));
 
-    // Nếu BE trả topLearners thật (sau này có điểm thật): thay thế toàn bộ bằng BE data
-    let topLearners = students.slice(0, 8);
-    if (hasRealTopLearners && beTopLearners.length > 0) {
-      topLearners = beTopLearners.map((tl) => ({
-        studentId: tl.studentId,
-        fullName: tl.fullName,
-        email: tl.email,
-        classCount: tl.classCount,
-        scoreSum: (tl.averageScore ?? 0) * Math.max(tl.classCount, 1),
-        courseCount: tl.courseCount,
-        courses: tl.courses ?? [],
-        classResults: [],
-        averageScore: Number(tl.averageScore ?? 0),
-        globalRank: tl.globalRank,
-      }));
-      // Sync lại field `students` cho đồng bộ nếu BE trả top 8 thật + students được BE fill sau này
-    }
+    // BE trả topLearners thật (chỉ gồm học sinh đã có điểm) thì dùng trực tiếp.
+    const topLearners = beTopLearners
+      ? beTopLearners.map((tl) => ({
+          studentId: tl.studentId,
+          fullName: tl.fullName,
+          email: tl.email,
+          classCount: tl.classCount,
+          courseCount: tl.courseCount,
+          courses: tl.courses ?? [],
+          classResults: [],
+          averageScore: toNumberOrNull(tl.averageScore),
+          globalRank: tl.globalRank,
+        }))
+      : students.filter((student) => student.averageScore != null).slice(0, 8);
 
     return {
       students,
@@ -1345,24 +1029,7 @@ const AdminDashboard = () => {
     [studentAnalytics.topLearners],
   );
 
-  const classStatsRows = useMemo(() => {
-    if (classRows.length > 0) {
-      return classRows;
-    }
-
-    return buildDemoUniverse(new Date()).classes.map((cls) => ({
-      ...cls,
-      courseLabel:
-        cls.courses?.map((course) => course.name).join(", ") ||
-        "Chưa gán khóa học",
-      teacherLabel:
-        cls.teachers?.map((teacher) => teacher.name).join(", ") ||
-        "Chưa phân công",
-      status: getClassStatus(cls.startDate, cls.endDate, new Date()),
-      startDateParsed: parseApiDate(cls.startDate),
-      endDateParsed: parseApiDate(cls.endDate),
-    }));
-  }, [classRows]);
+  const classStatsRows = classRows;
 
   const selectedClassPerformanceRows = useMemo(() => {
     if (!selectedClassId) {
@@ -1374,10 +1041,15 @@ const AdminDashboard = () => {
   }, [selectedClassId, studentAnalytics.performanceRows]);
 
   const classAnalytics = useMemo(() => {
-    const scoreValues = selectedClassPerformanceRows.map((item) => item.score);
-    const absenceRateValues = selectedClassPerformanceRows.map(
-      (item) => item.absenceRate,
-    );
+    // Chỉ tính học sinh đã có số liệu thật (null = chưa có điểm / chưa điểm danh).
+    const isRealNumber = (value) =>
+      value != null && Number.isFinite(Number(value));
+    const scoreValues = selectedClassPerformanceRows
+      .map((item) => item.score)
+      .filter(isRealNumber);
+    const absenceRateValues = selectedClassPerformanceRows
+      .map((item) => item.absenceRate)
+      .filter(isRealNumber);
 
     const scoreTotal = scoreValues.length || 1;
     const scoreBins = [
@@ -1430,6 +1102,8 @@ const AdminDashboard = () => {
     const absenceActiveBin = absenceBins[absenceFocusIndex] || null;
 
     return {
+      hasScoreData: scoreValues.length > 0,
+      hasAbsenceData: absenceRateValues.length > 0,
       scoreBins,
       absenceBins,
       scoreFocusIndex,
@@ -1648,13 +1322,6 @@ const AdminDashboard = () => {
             <span className="fw-bold text-primary">
               {user?.hoTen || "Quản trị viên"}
             </span>
-
-            {dataSources.overview !== "real" && (
-              <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2">
-                Đang hiển thị dữ liệu mẫu → dữ liệu thật sẽ tự hiển thị khi hệ
-                thống có dữ liệu
-              </span>
-            )}
           </div>
         </div>
 
@@ -1927,10 +1594,10 @@ const AdminDashboard = () => {
           </table>
         </div>
 
-        {dataSources.schedule !== "real" && (
+        {dataSources.schedule === "error" && (
           <div className="mt-2 text-muted small">
             <i className="bi bi-exclamation-circle me-2"></i>
-            Lịch học hôm nay đang hiển thị dữ liệu mẫu để trực quan hơn.
+            Không tải được lịch học hôm nay.
           </div>
         )}
       </div>
@@ -1975,14 +1642,14 @@ const AdminDashboard = () => {
               <div className="d-flex flex-wrap gap-2">
                 <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
                   Tổng hệ thống:{" "}
-                  {overviewDemoCharts.classSize.totalStudentsInSystem.toLocaleString(
+                  {overviewCharts.classSize.totalStudentsInSystem.toLocaleString(
                     "vi-VN",
                   )}{" "}
                   HS
                 </span>
                 <span className="badge rounded-pill text-bg-light border px-3 py-2">
                   Có dữ liệu phân nhóm:{" "}
-                  {overviewDemoCharts.classSize.totalTrackedStudents.toLocaleString(
+                  {overviewCharts.classSize.totalTrackedStudents.toLocaleString(
                     "vi-VN",
                   )}{" "}
                   HS
@@ -1991,8 +1658,9 @@ const AdminDashboard = () => {
             </div>
 
             <div style={{ height: "320px" }}>
+              {overviewCharts.classSize.hasData ? (
               <Bar
-                data={overviewDemoCharts.classSize.data}
+                data={overviewCharts.classSize.data}
                 options={hideXAxis({
                   ...buildGroupedBarOptions("Số học sinh", "Tỷ lệ (%)"),
                   plugins: {
@@ -2030,7 +1698,7 @@ const AdminDashboard = () => {
                       ...buildGroupedBarOptions("Số học sinh", "Tỷ lệ (%)")
                         .scales.y,
                       suggestedMax:
-                        overviewDemoCharts.classSize.totalStudentsInSystem >=
+                        overviewCharts.classSize.totalStudentsInSystem >=
                         1000
                           ? 600
                           : undefined,
@@ -2043,10 +1711,16 @@ const AdminDashboard = () => {
                   },
                 })}
               />
+              ) : (
+                <div className="h-100 d-flex align-items-center justify-content-center text-muted">
+                  Chưa có dữ liệu.
+                </div>
+              )}
             </div>
 
             <div className="d-flex flex-wrap gap-2 mt-3">
-              {overviewDemoCharts.classSize.summary.map((item) => (
+              {overviewCharts.classSize.hasData &&
+                overviewCharts.classSize.summary.map((item) => (
                 <span
                   key={item.label}
                   className="badge rounded-pill text-bg-light border px-3 py-2"
@@ -2074,17 +1748,24 @@ const AdminDashboard = () => {
             </div>
 
             <div style={{ height: "340px" }}>
-              <Bar
-                data={overviewDemoCharts.attendance.data}
-                options={buildGroupedBarOptions(
-                  "Số lượt (tối)",
-                  "Tỷ lệ % trên tổng",
-                )}
-              />
+              {overviewCharts.attendance.hasData ? (
+                <Bar
+                  data={overviewCharts.attendance.data}
+                  options={buildGroupedBarOptions(
+                    "Số lượt (tối)",
+                    "Tỷ lệ % trên tổng",
+                  )}
+                />
+              ) : (
+                <div className="h-100 d-flex align-items-center justify-content-center text-muted">
+                  Chưa có dữ liệu điểm danh.
+                </div>
+              )}
             </div>
 
             <div className="d-flex flex-wrap gap-2 mt-3">
-              {overviewDemoCharts.attendance.summary.map((item) => (
+              {overviewCharts.attendance.hasData &&
+                overviewCharts.attendance.summary.map((item) => (
                 <span
                   key={item.label}
                   className="badge rounded-pill text-bg-light border px-3 py-2"
@@ -2121,22 +1802,28 @@ const AdminDashboard = () => {
             </div>
 
             <div style={{ height: "360px" }}>
-              <Bar
-                data={overviewDemoCharts.classRange.data}
-                options={buildGroupedBarOptions("Số lớp", "Tỷ lệ (%)")}
-              />
+              {overviewCharts.classRange.hasData ? (
+                <Bar
+                  data={overviewCharts.classRange.data}
+                  options={buildGroupedBarOptions("Số lớp", "Tỷ lệ (%)")}
+                />
+              ) : (
+                <div className="h-100 d-flex align-items-center justify-content-center text-muted">
+                  Chưa có lớp học trong khoảng thời gian này.
+                </div>
+              )}
             </div>
 
             <div className="small text-muted mt-2">
               Trong khoảng chọn có{" "}
               <span className="fw-bold text-dark">
-                {overviewDemoCharts.classRange.total.toLocaleString("vi-VN")}
+                {overviewCharts.classRange.total.toLocaleString("vi-VN")}
               </span>{" "}
               lớp giao cắt với thời gian đang lọc.
             </div>
 
             <div className="d-flex flex-wrap gap-2 mt-3">
-              {overviewDemoCharts.classRange.summary.map((item) => (
+              {overviewCharts.classRange.summary.map((item) => (
                 <span
                   key={item.label}
                   className="badge rounded-pill text-bg-light border px-3 py-2"
@@ -2167,7 +1854,7 @@ const AdminDashboard = () => {
               label={
                 dataSources.attendance === "real"
                   ? "Chuyên cần: thật"
-                  : "Chuyên cần: fallback"
+                  : "Chuyên cần: không tải được"
               }
             />
             <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-3 py-2">
@@ -2307,7 +1994,7 @@ const AdminDashboard = () => {
                         <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
                           <div className="d-flex align-items-center gap-3">
                             <div className="teacher-avatar">
-                              {teacher.name.charAt(0).toUpperCase()}
+                              {(teacher.name || "?").charAt(0).toUpperCase()}
                             </div>
                             <div>
                               <div className="fw-bold text-dark d-flex align-items-center gap-2 flex-wrap">
@@ -2319,7 +2006,7 @@ const AdminDashboard = () => {
                                 )}
                               </div>
                               <div className="small text-muted">
-                                {teacher.email}
+                                {teacher.email || "Chưa có email"}
                                 {teacher.phone && <span className="ms-2">· {teacher.phone}</span>}
                               </div>
                               <div className="small text-muted d-flex align-items-center gap-2 flex-wrap">
@@ -2558,8 +2245,7 @@ const AdminDashboard = () => {
                                   </div>
 
                                   <div style={{ height: "280px" }}>
-                                    {classAnalytics.scoreChartData.labels
-                                      .length > 0 ? (
+                                    {classAnalytics.hasScoreData ? (
                                       <Bar
                                         data={classAnalytics.scoreChartData}
                                         options={hideXAxis(
@@ -2673,8 +2359,7 @@ const AdminDashboard = () => {
                                   </div>
 
                                   <div style={{ height: "280px" }}>
-                                    {classAnalytics.absenceChartData.labels
-                                      .length > 0 ? (
+                                    {classAnalytics.hasAbsenceData ? (
                                       <Bar
                                         data={classAnalytics.absenceChartData}
                                         options={hideXAxis(
