@@ -1,5 +1,9 @@
 import 'dotenv/config';
 
+// Luon chay theo gio UTC (giong container .NET cu): Prisma doc DATETIME cua MySQL nhu gio UTC,
+// nen dat TZ=UTC thi "gio luu trong DB" = "gio hien thi", khong bi lech 7 tieng tren may Windows.
+process.env.TZ = 'UTC';
+
 // Doc toan bo cau hinh tu bien moi truong (file .env khi chay dev, docker compose khi chay that).
 // Thay cho appsettings.json + IConfiguration ben .NET.
 

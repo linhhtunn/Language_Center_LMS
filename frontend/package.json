@@ -14,7 +14,6 @@
     "start": "serve -s dist"
   },
   "dependencies": {
-    "@microsoft/signalr": "^10.0.0",
     "animate.css": "^4.1.1",
     "axios": "^1.6.0",
     "bootstrap": "^5.3.2",
@@ -27,7 +26,8 @@
     "react-hot-toast": "^2.6.0",
     "react-router": "^6.30.4",
     "react-router-dom": "^6.30.4",
-    "serve": "^14.2.6"
+    "serve": "^14.2.6",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

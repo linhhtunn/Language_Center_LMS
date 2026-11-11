@@ -72,9 +72,15 @@ describe('chung', () => {
     expect(res.status).toBe(200);
   });
 
-  it('API chua co -> 404 dang JSON', async () => {
+  it('API chua co -> 404 (giong .NET, body rong)', async () => {
     const res = await request(app).get('/api/KhongCo');
     expect(res.status).toBe(404);
-    expect(res.body.success).toBe(false);
+  });
+
+  it('Date tra ve dang .NET (khong co Z)', async () => {
+    const { formatDotnetDateTime, dotnetCamel } = await import('../src/utils/dotnetCompat.js');
+    expect(formatDotnetDateTime(new Date('2026-11-11T13:41:30.000Z'))).toBe('2026-11-11T13:41:30');
+    expect(formatDotnetDateTime(new Date('2026-11-11T13:41:30.120Z'))).toBe('2026-11-11T13:41:30.12');
+    expect(['MaLop', 'ID', 'URLValue', 'MaHS', 'hoTen'].map(dotnetCamel)).toEqual(['maLop', 'id', 'urlValue', 'maHS', 'hoTen']);
   });
 });

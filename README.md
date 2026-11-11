@@ -3,7 +3,8 @@
 Hệ thống quản lý trung tâm ngoại ngữ (học sinh, giáo viên, phụ huynh, admin): lớp học, lịch học,
 điểm danh, bài tập, tài liệu, tin nhắn, thông báo, báo cáo, AI nhận xét bài làm và chatbot.
 
-Phiên bản này viết lại backend bằng **Node.js + TypeScript**, dựa trên dự án gốc dùng ASP.NET Core.
+Phiên bản này viết lại toàn bộ backend bằng **Node.js + TypeScript** từ dự án gốc dùng ASP.NET Core
+(23 controller, ~170 API, giữ nguyên đường dẫn và dạng JSON nên frontend dùng lại được).
 
 ## Công nghệ
 
@@ -24,7 +25,8 @@ backend/     API Node.js (src/), Prisma schema (prisma/), file upload mẫu (upl
 frontend/    Giao diện React
 database/    01_schema.sql (cấu trúc bảng), 02_seed.sql (dữ liệu khởi tạo), SQL bài tập mẫu
 deploy/      Script triển khai theo phiên bản lên VPS, tự quay lui khi lỗi
-MIGRATION_CHECKLIST.md   Tiến độ chuyển từng API từ bản .NET sang Node
+MIGRATION_CHECKLIST.md   Đối chiếu .NET → Node, khác biệt có chủ ý, lỗi của bản gốc
+backend/PORTING_GUIDE.md Quy ước viết module (giữ tương thích JSON với bản .NET)
 ```
 
 ## Chạy trên máy (dev)
@@ -49,7 +51,26 @@ npm install
 npm run dev
 ```
 
-Tài khoản demo nằm trong `database/02_seed.sql` (bảng `nguoidung`).
+Tài khoản demo (đổi hoặc xoá trước khi chạy thật):
+
+| Vai trò | Email | Mật khẩu |
+|---|---|---|
+| Admin | admin@qltt.local | QlttAdmin@2026!A9 |
+| Giáo viên | giaovien@qltt.local | QlttTeacher@2026!G7 |
+| Học sinh | hocsinh@qltt.local | QlttStudent@2026!S5 |
+| Phụ huynh | phuhuynh@qltt.local | QlttParent@2026!P6 |
+
+## Test
+
+Test chạy với MySQL thật đã nạp `database/01_schema.sql` + `02_seed.sql`:
+
+```powershell
+cd backend
+$env:DATABASE_URL="mysql://root:MAT_KHAU@127.0.0.1:3307/HeThongHocOnline_Final"
+npx vitest run --no-file-parallelism
+```
+
+Một số test so sánh thêm với backend .NET gốc ở `http://localhost:5099` nếu đang chạy; không có thì tự bỏ qua phần so sánh.
 
 ## Lệnh hay dùng (thư mục backend)
 

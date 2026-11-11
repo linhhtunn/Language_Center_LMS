@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import * as signalR from '@microsoft/signalr';
+import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import { getSignalRBaseUrl } from '../api/BaseApi';
 
-const SIGNALR_URL = `${getSignalRBaseUrl()}/hubs/chat`;
+// Realtime chat qua Socket.IO (namespace /chat) - thay cho SignalR hub /hubs/chat cu.
+const CHAT_URL = `${getSignalRBaseUrl()}/chat`;
+
+// Giong withAutomaticReconnect([0, 0, 3000, 3000, 5000, 10000]) cua SignalR: sau khi mat ket noi
+// thu lai 6 lan theo lich nay roi dung; lan ket noi dau that bai thi thu lai moi 5 giay.
+const RECONNECT_DELAYS = [0, 0, 3000, 3000, 5000, 10000];
+const INITIAL_RETRY_MS = 5000;
+const INVOKE_TIMEOUT_MS = 10000;
+const AUTH_ERRORS = ['AUTH_REQUIRED', 'AUTH_TOKEN_INVALID'];
 
 export const useChatHub = () => {
   const { user, logout } = useAuth();
@@ -28,113 +36,116 @@ export const useChatHub = () => {
     }
   }, []);
 
-  // Kết nối đến SignalR Hub
+  // Ket noi toi Socket.IO namespace /chat
   useEffect(() => {
     if (!token) return;
     authFailedRef.current = false;
     clearReconnectTimeout();
     let cancelled = false;
+    let everConnected = false;
+    let reconnecting = false;
+    let reconnectAttempt = 0;
 
-    const connectToHub = async () => {
-      if (authFailedRef.current || cancelled) return;
-      try {
-        const connection = new signalR.HubConnectionBuilder()
-          .withUrl(SIGNALR_URL, {
-            accessTokenFactory: () => token,
-            withCredentials: true
-          })
-          .withAutomaticReconnect([0, 0, 3000, 3000, 5000, 10000])
-          .withHubProtocol(new signalR.JsonHubProtocol())
-          .configureLogging(signalR.LogLevel.None)
-          .build();
+    const socket = io(CHAT_URL, {
+      path: '/socket.io',
+      auth: { token },
+      withCredentials: true,
+      autoConnect: false,
+      // Tu dieu khien lich ket noi lai (giong SignalR) thay vi de Socket.IO tu backoff.
+      reconnection: false
+    });
+    connectionRef.current = socket;
 
-        // Connection event handlers
-        connection.onreconnecting((error) => {
-          setIsConnected(false);
-          console.log('SignalR reconnecting...', error);
-        });
-
-        connection.onreconnected(() => {
-          setIsConnected(true);
-          setConnectionError(null);
-          console.log('SignalR reconnected');
-        });
-
-        connection.onclose((error) => {
-          setIsConnected(false);
-          if (error) {
-            setConnectionError(error);
-            console.error('SignalR connection closed:', error);
-          }
-        });
-
-        // Hub method: message-created
-        connection.on('message-created', (message) => {
-          handlersRef.current['message-created'].forEach(handler => handler(message));
-        });
-
-        // Hub method: conversation-updated
-        connection.on('conversation-updated', (conversation) => {
-          handlersRef.current['conversation-updated'].forEach(handler => handler(conversation));
-        });
-
-        // Hub method: message-read
-        connection.on('message-read', (data) => {
-          handlersRef.current['message-read'].forEach(handler => handler(data));
-        });
-
-        connectionRef.current = connection;
-        await connection.start();
-        if (cancelled) {
-          await connection.stop().catch(() => {});
-          return;
-        }
-        setIsConnected(true);
-        setConnectionError(null);
-        console.log('SignalR connected');
-      } catch (error) {
-        if (cancelled || authFailedRef.current) return;
-
-        const aborted =
-          error?.name === 'AbortError' ||
-          error?.message?.includes('stopped during negotiation') ||
-          error?.message?.includes('stopped before the hub handshake could complete');
-
-        if (aborted) {
-          setIsConnected(false);
-          setConnectionError(null);
-          return;
-        }
-
-        console.error('SignalR connection error:', error);
-        setIsConnected(false);
-        setConnectionError(error.message);
-        const unauthorized =
-          error?.message?.includes("Status code '401'") ||
-          error?.message?.includes('Unauthorized');
-
-        if (unauthorized) {
-          authFailedRef.current = true;
-          logout?.();
-          return;
-        }
-
-        // Retry after 5 seconds
-        clearReconnectTimeout();
-        reconnectTimeoutRef.current = setTimeout(connectToHub, 5000);
-      }
+    const scheduleConnect = (delay) => {
+      clearReconnectTimeout();
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
+        if (!cancelled && !authFailedRef.current) socket.connect();
+      }, delay);
     };
 
-    connectToHub();
+    // Thu ket noi lai sau khi da tung ket noi; het luot -> dong han (nhu onclose cua SignalR).
+    const tryReconnect = (error) => {
+      if (reconnectAttempt >= RECONNECT_DELAYS.length) {
+        reconnecting = false;
+        setIsConnected(false);
+        if (error) {
+          setConnectionError(error);
+          console.error('Socket.IO connection closed:', error);
+        }
+        return;
+      }
+      scheduleConnect(RECONNECT_DELAYS[reconnectAttempt]);
+      reconnectAttempt += 1;
+    };
+
+    socket.on('connect', () => {
+      if (cancelled) return;
+      setIsConnected(true);
+      setConnectionError(null);
+      if (reconnecting) {
+        console.log('Socket.IO reconnected');
+      } else {
+        console.log('Socket.IO connected');
+      }
+      everConnected = true;
+      reconnecting = false;
+      reconnectAttempt = 0;
+    });
+
+    socket.on('disconnect', (reason) => {
+      setIsConnected(false);
+      if (cancelled || reason === 'io client disconnect') return;
+      // Tuong duong onreconnecting
+      console.log('Socket.IO reconnecting...', reason);
+      reconnecting = true;
+      reconnectAttempt = 0;
+      tryReconnect(null);
+    });
+
+    socket.on('connect_error', (error) => {
+      if (cancelled || authFailedRef.current) return;
+      setIsConnected(false);
+
+      if (reconnecting) {
+        tryReconnect(error);
+        return;
+      }
+
+      console.error('Socket.IO connection error:', error);
+      setConnectionError(error?.message);
+      const unauthorized = AUTH_ERRORS.includes(error?.message);
+      if (unauthorized && !everConnected) {
+        authFailedRef.current = true;
+        logout?.();
+        return;
+      }
+
+      // Retry after 5 seconds
+      scheduleConnect(INITIAL_RETRY_MS);
+    });
+
+    // Su kien tu server
+    socket.on('message-created', (message) => {
+      handlersRef.current['message-created'].forEach(handler => handler(message));
+    });
+
+    socket.on('conversation-updated', (conversation) => {
+      handlersRef.current['conversation-updated'].forEach(handler => handler(conversation));
+    });
+
+    socket.on('message-read', (data) => {
+      handlersRef.current['message-read'].forEach(handler => handler(data));
+    });
+
+    socket.connect();
 
     return () => {
       cancelled = true;
       clearReconnectTimeout();
-      if (connectionRef.current) {
-        const connection = connectionRef.current;
-        connectionRef.current = null;
-        connection.stop().catch(e => console.error('Error stopping connection:', e));
-      }
+      if (connectionRef.current === socket) connectionRef.current = null;
+      socket.removeAllListeners();
+      socket.disconnect();
     };
   }, [token, clearReconnectTimeout, logout]);
 
@@ -148,14 +159,21 @@ export const useChatHub = () => {
     }
   }, []);
 
+  // Goi "hub method" tren server, cho ack { ok, error }.
+  const invoke = async (method, ...args) => {
+    const response = await connectionRef.current.timeout(INVOKE_TIMEOUT_MS).emitWithAck(method, ...args);
+    if (!response?.ok) throw new Error(response?.error || `${method} failed`);
+    return response.data;
+  };
+
   // Join conversation group
   const joinConversation = useCallback(async (conversationId) => {
     if (!connectionRef.current || !isConnected) {
-      console.warn('SignalR not connected, cannot join conversation');
+      console.warn('Socket.IO not connected, cannot join conversation');
       return false;
     }
     try {
-      await connectionRef.current.invoke('JoinConversation', conversationId);
+      await invoke('JoinConversation', conversationId);
       return true;
     } catch (error) {
       console.error('Error joining conversation:', error);
@@ -167,7 +185,7 @@ export const useChatHub = () => {
   const leaveConversation = useCallback(async (conversationId) => {
     if (!connectionRef.current || !isConnected) return false;
     try {
-      await connectionRef.current.invoke('LeaveConversation', conversationId);
+      await invoke('LeaveConversation', conversationId);
       return true;
     } catch (error) {
       console.error('Error leaving conversation:', error);

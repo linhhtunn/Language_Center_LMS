@@ -41,8 +41,14 @@ export default defineConfig(({ mode }) => {
           if (id.includes('/lucide-react/') || id.includes('/animate.css/')) {
             return 'ui-icons';
           }
-          if (id.includes('/@microsoft/') || id.includes('/signalr/')) {
-            return 'signalr';
+          if (
+            id.includes('/socket.io-client/') ||
+            id.includes('/socket.io-parser/') ||
+            id.includes('/engine.io-client/') ||
+            id.includes('/engine.io-parser/') ||
+            id.includes('/@socket.io/')
+          ) {
+            return 'realtime';
           }
           if (id.includes('/axios/')) {
             return 'http';
