@@ -1,0 +1,98 @@
+# Ban chay THAT tren VPS.
+#   1. cp prod.env.example .env.prod   va dien day du gia tri (KHONG commit .env.prod)
+#   2. Trien khai/cap nhat theo PHIEN BAN bang script (xem deploy/README.md):
+#        deploy/release.sh v1.1.0      (chay tren may dev: dong goi, gui len, build, kiem tra, tu quay lui neu loi)
+#        /opt/lms/rollback.sh  (chay tren VPS: quay ve phien ban truoc)
+#   Moi phien ban la 1 cap image lms-backend:<ver> + lms-frontend:<ver>;
+#   APP_VERSION chon phien ban dang chay. Khong dung "up --build" truc tiep nua.
+#
+# Khac voi docker-compose.yml (ban dev):
+#   - MySQL va backend KHONG mo cong ra Internet; chi Caddy mo 80/443.
+#   - Caddy tu xin chung chi HTTPS cho ten mien.
+#   - Mat khau, JWT secret, API key deu lay tu .env.prod; thieu la compose bao loi ngay.
+#   - Swagger tat, CORS chi cho phep dung ten mien frontend.
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Thieu MYSQL_ROOT_PASSWORD trong .env.prod}"
+      MYSQL_DATABASE: HeThongHocOnline_Final
+      # User rieng cho ung dung (chi co quyen tren database nay), khong dung root.
+      MYSQL_USER: "${MYSQL_APP_USER:-qltt_app}"
+      MYSQL_PASSWORD: "${MYSQL_APP_PASSWORD:?Thieu MYSQL_APP_PASSWORD trong .env.prod}"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Chi chay 1 lan khi volume mysql_data con trong: tao bang + du lieu khoi tao.
+      - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    # Image duoc build san boi deploy.sh, gan nhan theo phien ban.
+    image: "lms-backend:${APP_VERSION:?Thieu APP_VERSION - hay dung deploy.sh / rollback.sh}"
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      # Mat khau co ky tu dac biet (@ : / #) thi phai ma hoa URL, vd @ -> %40.
+      DATABASE_URL: "mysql://${MYSQL_APP_USER:-qltt_app}:${MYSQL_APP_PASSWORD}@mysql:3306/HeThongHocOnline_Final"
+      JWT_SECRET: "${JWT_SECRET:?Thieu JWT_SECRET trong .env.prod}"
+      ALLOWED_ORIGINS: "https://${APP_DOMAIN:?Thieu APP_DOMAIN trong .env.prod}"
+      # Backend chi nhan request tu Caddy, nen tin header X-Forwarded-For de lay IP that cua khach.
+      TRUST_PROXY: "true"
+      ENABLE_SWAGGER: "false"
+      AI_PROVIDER: "${AI_PROVIDER:-Claude}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-opus-5-5}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      CHATBOT_DAILY_AI_REQUESTS_PER_USER: "20"
+      CHATBOT_DAILY_AI_REQUESTS_TOTAL: "200"
+      CHATBOT_MAX_OUTPUT_TOKENS: "1024"
+      CHATBOT_TIMEOUT_SECONDS: "35"
+      APP_VERSION: "${APP_VERSION}"
+    expose:
+      - "8080"
+    volumes:
+      - backend_uploads:/app/uploads
+
+  frontend:
+    # Build san boi deploy.sh voi VITE_API_BASE_URL=https://$API_DOMAIN (ghi vao bundle luc build).
+    image: "lms-frontend:${APP_VERSION:?Thieu APP_VERSION - hay dung deploy.sh / rollback.sh}"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    environment:
+      APP_DOMAIN: "${APP_DOMAIN}"
+      API_DOMAIN: "${API_DOMAIN}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  mysql_data:
+  backend_uploads:
+  caddy_data:
+  caddy_config:

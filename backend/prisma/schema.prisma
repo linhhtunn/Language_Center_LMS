@@ -1,0 +1,1140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model baitap {
+  MaBaiTap               String                   @id @db.Char(36)
+  MaKhoaHoc              String                   @db.Char(36)
+  TenBaiTap              String                   @db.VarChar(255)
+  MoTa                   Json?
+  LoaiBaiTap             Int?
+  ThoiGianLamBai         Int?
+  DiemToiDa              Decimal?                 @db.Decimal(5, 2)
+  NguoiTao               String?                  @db.Char(36)
+  ThoiGianTao            DateTime?                @default(now()) @db.DateTime(0)
+  NguoiSua               String?                  @db.Char(36)
+  ThoiGianSua            DateTime?                @db.DateTime(0)
+  TrangThai              Boolean?                 @default(true)
+  DaXoa                  Boolean?                 @default(false)
+  TrinhDo                Int?
+  KyNang                 Int?
+  MucDo                  Int?
+  HuongDanChung          String?                  @db.Text
+  NoiDungNguCanhChung    String?                  @db.Text
+  ChoXemDapAnSauNop      Boolean?                 @default(false)
+  ChoNopNhieuLan         Boolean?                 @default(false)
+  SoLanNopToiDa          Int?
+  LaMauNganHang          Boolean                  @default(false)
+  LoaiCauHoi             Int?
+  MaNganHang             String?                  @db.Char(36)
+  khoahoc                khoahoc                  @relation(fields: [MaKhoaHoc], references: [MaKhoaHoc], onDelete: NoAction, onUpdate: NoAction, map: "baitap_ibfk_1")
+  chitietdanhmuc         chitietdanhmuc?          @relation(fields: [LoaiBaiTap], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "baitap_ibfk_2")
+  nganhangde             nganhangde?              @relation(fields: [MaNganHang], references: [MaNganHang], onUpdate: NoAction, map: "fk_baitap_nganhangde")
+  baitapcauhoi           baitapcauhoi[]
+  chitietdesinhngaunhien chitietdesinhngaunhien[]
+  sukienlophoc           sukienlophoc[]
+
+  @@index([LoaiBaiTap], map: "LoaiBaiTap")
+  @@index([MaKhoaHoc], map: "MaKhoaHoc")
+  @@index([LoaiCauHoi], map: "idx_baitap_loai_cau_hoi")
+  @@index([LaMauNganHang], map: "idx_baitap_mau_ngan_hang")
+  @@index([MaNganHang], map: "idx_baitap_ngan_hang")
+  @@index([TrinhDo, KyNang, MucDo], map: "idx_bt_filter")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model baitapcauhoi {
+  MaBaiTap      String          @db.Char(36)
+  MaCauHoi      String?         @db.Char(36)
+  DiemCuaCau    Decimal?        @db.Decimal(5, 2)
+  ThuTu         Int?
+  NguoiTao      String?         @db.Char(36)
+  ThoiGianTao   DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua      String?         @db.Char(36)
+  ThoiGianSua   DateTime?       @db.DateTime(0)
+  MaCauHoiDe    String          @id @db.Char(36)
+  SoCau         String?         @db.VarChar(50)
+  NoiDung       Json
+  baitap        baitap          @relation(fields: [MaBaiTap], references: [MaBaiTap], onDelete: Cascade, onUpdate: NoAction, map: "baitapcauhoi_ibfk_1")
+  cauhoiluutu   cauhoiluutu[]
+  chitietnopbai chitietnopbai[]
+
+  @@index([MaBaiTap], map: "idx_btch_baitap")
+  @@index([MaBaiTap, ThuTu], map: "uq_baitap_thutucau")
+}
+
+model binhluan {
+  MaBinhLuan   String       @id @db.Char(36)
+  MaSuKien     String       @db.Char(36)
+  MaNguoiDung  String       @db.Char(36)
+  NoiDung      String       @db.Text
+  NguoiTao     String?      @db.Char(36)
+  ThoiGianTao  DateTime?    @default(now()) @db.DateTime(0)
+  NguoiSua     String?      @db.Char(36)
+  ThoiGianSua  DateTime?    @db.DateTime(0)
+  TrangThai    Boolean?     @default(true)
+  DaXoa        Boolean?     @default(false)
+  sukienlophoc sukienlophoc @relation(fields: [MaSuKien], references: [MaSuKien], onDelete: NoAction, onUpdate: NoAction, map: "binhluan_ibfk_1")
+  nguoidung    nguoidung    @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "binhluan_ibfk_2")
+
+  @@index([MaNguoiDung], map: "MaNguoiDung")
+  @@index([MaSuKien], map: "MaSuKien")
+}
+
+model buoihoc {
+  MaBuoiHoc                              String          @id @db.Char(36)
+  MaLopHoc                               String          @db.Char(36)
+  MaPhongHoc                             String?         @db.Char(36)
+  NgayHoc                                DateTime        @db.Date
+  MaTietBatDau                           Int
+  MaTietKetThuc                          Int
+  TieuDe                                 String?         @db.VarChar(255)
+  NoiDung                                String?         @db.Text
+  NguoiTao                               String?         @db.Char(36)
+  ThoiGianTao                            DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua                               String?         @db.Char(36)
+  ThoiGianSua                            DateTime?       @db.DateTime(0)
+  TrangThai                              Boolean?        @default(true)
+  DaXoa                                  Boolean?        @default(false)
+  lophoc                                 lophoc          @relation(fields: [MaLopHoc], references: [MaLopHoc], onDelete: NoAction, onUpdate: NoAction, map: "buoihoc_ibfk_1")
+  phonghoc                               phonghoc?       @relation(fields: [MaPhongHoc], references: [MaPhongHoc], onDelete: NoAction, onUpdate: NoAction, map: "buoihoc_ibfk_2")
+  tiethoc_buoihoc_MaTietBatDauTotiethoc  tiethoc         @relation("buoihoc_MaTietBatDauTotiethoc", fields: [MaTietBatDau], references: [MaTiet], onDelete: NoAction, onUpdate: NoAction, map: "buoihoc_ibfk_3")
+  tiethoc_buoihoc_MaTietKetThucTotiethoc tiethoc         @relation("buoihoc_MaTietKetThucTotiethoc", fields: [MaTietKetThuc], references: [MaTiet], onDelete: NoAction, onUpdate: NoAction, map: "buoihoc_ibfk_4")
+  diemdanh                               diemdanh[]
+  yeucaulichday                          yeucaulichday[]
+
+  @@index([MaLopHoc], map: "MaLopHoc")
+  @@index([MaPhongHoc], map: "MaPhongHoc")
+  @@index([MaTietBatDau], map: "MaTietBatDau")
+  @@index([MaTietKetThuc], map: "MaTietKetThuc")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cauhoiluutu {
+  MaLuuTu         String       @id @db.Char(36)
+  MaNopBai        String       @db.Char(36)
+  MaCauHoiDe      String       @db.Char(36)
+  DapAnTamThoi    Json?
+  DanhDauXemLai   Boolean?     @default(false)
+  ThoiGianLuuCuoi DateTime?    @default(now()) @db.DateTime(0)
+  baitapcauhoi    baitapcauhoi @relation(fields: [MaCauHoiDe], references: [MaCauHoiDe], onDelete: NoAction, onUpdate: NoAction, map: "fk_luutu_btch")
+  nopbai          nopbai       @relation(fields: [MaNopBai], references: [MaNopBai], onDelete: Cascade, onUpdate: NoAction, map: "fk_luutu_nopbai")
+
+  @@unique([MaNopBai, MaCauHoiDe], map: "uq_luutu_nopbai_cauhoi")
+  @@index([MaCauHoiDe], map: "fk_luutu_btch")
+  @@index([MaNopBai], map: "idx_luutu_nopbai")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cautrucde {
+  MaCauTruc        String             @id @db.Char(36)
+  TenCauTruc       String             @db.VarChar(255)
+  TrinhDo          Int?
+  KyNang           Int?
+  MucDo            Int?
+  MoTa             Json?
+  NguoiTao         String?            @db.Char(36)
+  ThoiGianTao      DateTime?          @default(now()) @db.DateTime(0)
+  NguoiSua         String?            @db.Char(36)
+  ThoiGianSua      DateTime?          @db.DateTime(0)
+  TrangThai        Boolean?           @default(true)
+  DaXoa            Boolean?           @default(false)
+  chitietcautrucde chitietcautrucde[]
+  desinhngaunhien  desinhngaunhien[]
+
+  @@index([TrinhDo, KyNang, MucDo], map: "idx_cautruc_filter")
+}
+
+model chatbot_ai_usage {
+  UserId   String   @db.Char(36)
+  DayUtc   DateTime @db.DateTime(6)
+  Requests Int      @default(0)
+
+  @@id([UserId, DayUtc])
+}
+
+model chatbot_exam_sessions {
+  UserId       String   @db.Char(36)
+  AssignmentId String   @db.Char(36)
+  ExpiresAtUtc DateTime @db.DateTime(6)
+
+  @@id([UserId, AssignmentId])
+}
+
+model chatbot_messages {
+  Id              String          @id @db.Char(36)
+  ThreadId        String          @db.Char(36)
+  RequestId       String          @db.Char(36)
+  Role            String          @db.VarChar(12)
+  Content         String          @db.Text
+  Source          String          @db.VarChar(24)
+  CreatedAtUtc    DateTime        @db.DateTime(6)
+  chatbot_threads chatbot_threads @relation(fields: [ThreadId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "chatbot_messages_ibfk_1")
+
+  @@unique([ThreadId, RequestId, Role], map: "uq_chatbot_request")
+  @@index([ThreadId, CreatedAtUtc], map: "ix_chatbot_time")
+}
+
+model chatbot_threads {
+  Id               String             @id @db.Char(36)
+  UserId           String             @db.Char(36)
+  Title            String             @db.VarChar(120)
+  CreatedAtUtc     DateTime           @db.DateTime(6)
+  UpdatedAtUtc     DateTime           @db.DateTime(6)
+  chatbot_messages chatbot_messages[]
+
+  @@index([UserId, UpdatedAtUtc], map: "ix_chatbot_owner")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model chitietcautrucde {
+  MaChiTiet     String    @id @db.Char(36)
+  MaCauTruc     String    @db.Char(36)
+  LoaiCauHoi    Int
+  MucDo         Int?
+  SoLuongCanLay Int       @default(1)
+  TenPhan       String?   @db.VarChar(100)
+  ThuTu         Int?      @default(0)
+  cautrucde     cautrucde @relation(fields: [MaCauTruc], references: [MaCauTruc], onDelete: Cascade, onUpdate: NoAction, map: "fk_ctcautruc_cautruc")
+
+  @@unique([MaCauTruc, LoaiCauHoi], map: "uq_cautruc_loaicauhoi")
+  @@index([LoaiCauHoi], map: "idx_ctcautruc_loai")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model chitietdanhmuc {
+  MaChiTiet                                                Int               @id @default(autoincrement())
+  MaNhom                                                   Int
+  MaCode                                                   String?           @db.VarChar(50)
+  TenChiTiet                                               String            @db.VarChar(255)
+  ThuTu                                                    Int?              @default(0)
+  NguoiTao                                                 String?           @db.Char(36)
+  ThoiGianTao                                              DateTime?         @default(now()) @db.DateTime(0)
+  NguoiSua                                                 String?           @db.Char(36)
+  ThoiGianSua                                              DateTime?         @db.DateTime(0)
+  TrangThai                                                Boolean?          @default(true)
+  DaXoa                                                    Boolean?          @default(false)
+  baitap                                                   baitap[]
+  nhomdanhmuc                                              nhomdanhmuc       @relation(fields: [MaNhom], references: [MaNhom], onDelete: NoAction, onUpdate: NoAction, map: "chitietdanhmuc_ibfk_1")
+  diemdanh                                                 diemdanh[]
+  hocsinhlophoc                                            hocsinhlophoc[]
+  khoahoc                                                  khoahoc[]
+  lophoc                                                   lophoc[]
+  nganhangcauhoi_nganhangcauhoi_LoaiCauHoiTochitietdanhmuc nganhangcauhoi[]  @relation("nganhangcauhoi_LoaiCauHoiTochitietdanhmuc")
+  nganhangcauhoi_nganhangcauhoi_MucDoTochitietdanhmuc      nganhangcauhoi[]  @relation("nganhangcauhoi_MucDoTochitietdanhmuc")
+  nganhangde_nganhangde_KyNangTochitietdanhmuc             nganhangde[]      @relation("nganhangde_KyNangTochitietdanhmuc")
+  nganhangde_nganhangde_MucDoTochitietdanhmuc              nganhangde[]      @relation("nganhangde_MucDoTochitietdanhmuc")
+  nganhangde_nganhangde_TrinhDoTochitietdanhmuc            nganhangde[]      @relation("nganhangde_TrinhDoTochitietdanhmuc")
+  nguoidung                                                nguoidung[]
+  nopbai                                                   nopbai[]
+  phonghoc                                                 phonghoc[]
+  phuhuynhhocsinh                                          phuhuynhhocsinh[]
+  sukienlophoc_sukienlophoc_DangSuKienTochitietdanhmuc     sukienlophoc[]    @relation("sukienlophoc_DangSuKienTochitietdanhmuc")
+  sukienlophoc_sukienlophoc_MaTrangThaiTochitietdanhmuc    sukienlophoc[]    @relation("sukienlophoc_MaTrangThaiTochitietdanhmuc")
+
+  @@unique([MaNhom, MaCode], map: "UQ_chitietdanhmuc_MaNhom_MaCode")
+  @@index([MaNhom], map: "MaNhom")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model chitietdesinhngaunhien {
+  MaChiTiet       String          @id @db.Char(36)
+  MaDe            String          @db.Char(36)
+  MaBaiTap        String          @db.Char(36)
+  ThuTuTrongDe    Int?            @default(0)
+  baitap          baitap          @relation(fields: [MaBaiTap], references: [MaBaiTap], onDelete: NoAction, onUpdate: NoAction, map: "fk_ctdesinh_baitap")
+  desinhngaunhien desinhngaunhien @relation(fields: [MaDe], references: [MaDe], onDelete: Cascade, onUpdate: NoAction, map: "fk_ctdesinh_de")
+
+  @@unique([MaDe, MaBaiTap], map: "uq_desinh_de_baitap")
+  @@index([MaBaiTap], map: "idx_ctdesinh_baitap")
+}
+
+model chitietkhoahoc_lophoc {
+  MaKhoaHoc   String    @db.Char(36)
+  MaLopHoc    String    @db.Char(36)
+  GhiChu      String?   @db.VarChar(255)
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  khoahoc     khoahoc   @relation(fields: [MaKhoaHoc], references: [MaKhoaHoc], onDelete: NoAction, onUpdate: NoAction, map: "chitietkhoahoc_lophoc_ibfk_1")
+  lophoc      lophoc    @relation(fields: [MaLopHoc], references: [MaLopHoc], onDelete: NoAction, onUpdate: NoAction, map: "chitietkhoahoc_lophoc_ibfk_2")
+
+  @@id([MaKhoaHoc, MaLopHoc])
+  @@index([MaLopHoc, DaXoa, TrangThai], map: "idx_ChiTietKHLH_LopHoc_Active")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model chitietnopbai {
+  MaChiTiet        String       @id @db.Char(36)
+  MaNopBai         String       @db.Char(36)
+  MaCauHoi         String       @db.Char(36)
+  CauTraLoiHocSinh String?      @db.Text
+  DiemDatDuoc      Decimal?     @default(0.00) @db.Decimal(5, 2)
+  NguoiTao         String?      @db.Char(36)
+  ThoiGianTao      DateTime?    @default(now()) @db.DateTime(0)
+  NguoiSua         String?      @db.Char(36)
+  ThoiGianSua      DateTime?    @db.DateTime(0)
+  TrangThai        Boolean?     @default(true)
+  DaXoa            Boolean?     @default(false)
+  DapAnHocVien     Json?
+  TrangThaiCau     Int?
+  TrangThaiChamTay Int?
+  DanhDauXemLai    Boolean?     @default(false)
+  NhanXetGiaoVien  String?      @db.Text
+  nopbai           nopbai       @relation(fields: [MaNopBai], references: [MaNopBai], onDelete: NoAction, onUpdate: NoAction, map: "chitietnopbai_ibfk_1")
+  baitapcauhoi     baitapcauhoi @relation(fields: [MaCauHoi], references: [MaCauHoiDe], onDelete: NoAction, onUpdate: NoAction, map: "fk_ctnb_btch")
+
+  @@index([MaNopBai], map: "MaNopBai")
+  @@index([MaCauHoi], map: "fk_ctnb_btch")
+  @@index([MaNopBai, TrangThaiCau], map: "idx_ctnb_nopbai_tt")
+  @@index([MaNopBai, DanhDauXemLai], map: "idx_ctnb_nopbai_xemlai")
+}
+
+model chucnang {
+  MaChucNang  Int       @id @default(autoincrement())
+  TenChucNang String    @db.VarChar(100)
+  MoTa        String?   @db.VarChar(255)
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  quyen       quyen[]
+}
+
+model chucnanghethong {
+  maChucNang     Int              @id @default(autoincrement())
+  maChucNangCode String           @unique(map: "uq_chucnang_code") @db.VarChar(100)
+  tenChucNang    String           @db.VarChar(255)
+  maTrang        String           @db.VarChar(100)
+  tenTrang       String           @db.VarChar(255)
+  thuTu          Int
+  vaitrochucnang vaitrochucnang[]
+}
+
+model chuonghoc {
+  MaChuong    String    @id @db.Char(36)
+  MaKhoaHoc   String    @db.Char(36)
+  TenChuong   String    @db.VarChar(255)
+  MoTa        String?   @db.Text
+  ThuTu       Int?
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  MaLopHoc    String?   @db.Char(36)
+  khoahoc     khoahoc   @relation(fields: [MaKhoaHoc], references: [MaKhoaHoc], onDelete: NoAction, onUpdate: NoAction, map: "chuonghoc_ibfk_1")
+  tailieu     tailieu[]
+
+  @@index([MaKhoaHoc], map: "MaKhoaHoc1")
+  @@index([MaLopHoc], map: "idx_ChuongHoc_MaLopHoc")
+}
+
+model dapandiendkhuyet {
+  MaDapAnDien       String         @id @db.Char(36)
+  MaCauHoi          String         @db.Char(36)
+  DapAnChuan        String         @db.Text
+  DapAnThayThe      String?        @db.Text
+  PhanBietHoaThuong Boolean?       @default(false)
+  NguoiTao          String?        @db.Char(36)
+  ThoiGianTao       DateTime?      @default(now()) @db.DateTime(0)
+  NguoiSua          String?        @db.Char(36)
+  ThoiGianSua       DateTime?      @db.DateTime(0)
+  TrangThai         Boolean?       @default(true)
+  DaXoa             Boolean?       @default(false)
+  nganhangcauhoi    nganhangcauhoi @relation(fields: [MaCauHoi], references: [MaCauHoi], onDelete: NoAction, onUpdate: NoAction, map: "dapandiendkhuyet_ibfk_1")
+
+  @@index([MaCauHoi], map: "MaCauHoi1")
+  @@index([MaCauHoi, DaXoa, TrangThai], map: "idx_DapAnDienKhuyet_CauHoi_Active")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model desinhngaunhien {
+  MaDe                   String                   @id @db.Char(36)
+  MaCauTruc              String                   @db.Char(36)
+  TenDe                  String?                  @db.VarChar(255)
+  LanSinh                Int?                     @default(1)
+  TongSoLanSinh          Int?                     @default(1)
+  NguoiTao               String?                  @db.Char(36)
+  ThoiGianTao            DateTime?                @default(now()) @db.DateTime(0)
+  TrangThai              Boolean?                 @default(true)
+  DaXoa                  Boolean?                 @default(false)
+  chitietdesinhngaunhien chitietdesinhngaunhien[]
+  cautrucde              cautrucde                @relation(fields: [MaCauTruc], references: [MaCauTruc], onDelete: NoAction, onUpdate: NoAction, map: "fk_desinh_cautruc")
+
+  @@index([MaCauTruc], map: "idx_desinh_cautruc")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model diemdanh {
+  MaBuoiHoc      String          @db.Char(36)
+  MaHocSinh      String          @db.Char(36)
+  MaTrangThai    Int?
+  GhiChu         String?         @db.VarChar(255)
+  NguoiTao       String?         @db.Char(36)
+  ThoiGianTao    DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua       String?         @db.Char(36)
+  ThoiGianSua    DateTime?       @db.DateTime(0)
+  TrangThai      Boolean?        @default(true)
+  DaXoa          Boolean?        @default(false)
+  buoihoc        buoihoc         @relation(fields: [MaBuoiHoc], references: [MaBuoiHoc], onDelete: NoAction, onUpdate: NoAction, map: "diemdanh_ibfk_1")
+  hocsinh        hocsinh         @relation(fields: [MaHocSinh], references: [MaHocSinh], onDelete: NoAction, onUpdate: NoAction, map: "diemdanh_ibfk_2")
+  chitietdanhmuc chitietdanhmuc? @relation(fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "diemdanh_ibfk_3")
+
+  @@id([MaBuoiHoc, MaHocSinh])
+  @@index([MaTrangThai], map: "MaTrangThai")
+  @@index([MaHocSinh, DaXoa, TrangThai], map: "idx_DiemDanh_HocSinh_Active")
+}
+
+model dinhkem {
+  MaSuKien        String          @db.Char(36)
+  MaTaiNguyen     String          @db.Char(36)
+  NguoiTao        String?         @db.Char(36)
+  ThoiGianTao     DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua        String?         @db.Char(36)
+  ThoiGianSua     DateTime?       @db.DateTime(0)
+  TrangThai       Boolean?        @default(true)
+  DaXoa           Boolean?        @default(false)
+  sukienlophoc    sukienlophoc    @relation(fields: [MaSuKien], references: [MaSuKien], onDelete: NoAction, onUpdate: NoAction, map: "dinhkem_ibfk_1")
+  tainguyenluutru tainguyenluutru @relation(fields: [MaTaiNguyen], references: [MaTaiNguyen], onDelete: NoAction, onUpdate: NoAction, map: "dinhkem_ibfk_2")
+
+  @@id([MaSuKien, MaTaiNguyen])
+  @@index([MaTaiNguyen, DaXoa, TrangThai], map: "idx_DinhKem_TaiNguyen_Active")
+}
+
+model dinhkemnopbai {
+  MaNopBai        String          @db.Char(36)
+  MaTaiNguyen     String          @db.Char(36)
+  NguoiTao        String?         @db.Char(36)
+  ThoiGianTao     DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua        String?         @db.Char(36)
+  ThoiGianSua     DateTime?       @db.DateTime(0)
+  TrangThai       Boolean?        @default(true)
+  DaXoa           Boolean?        @default(false)
+  nopbai          nopbai          @relation(fields: [MaNopBai], references: [MaNopBai], onDelete: NoAction, onUpdate: NoAction, map: "dinhkemnopbai_ibfk_1")
+  tainguyenluutru tainguyenluutru @relation(fields: [MaTaiNguyen], references: [MaTaiNguyen], onDelete: NoAction, onUpdate: NoAction, map: "dinhkemnopbai_ibfk_2")
+
+  @@id([MaNopBai, MaTaiNguyen])
+  @@index([MaTaiNguyen, DaXoa, TrangThai], map: "idx_DinhKemNopBai_TaiNguyen_Active")
+}
+
+model dinhkemthongbao {
+  MaThongBao      String          @db.Char(36)
+  MaTaiNguyen     String          @db.Char(36)
+  NguoiTao        String?         @db.Char(36)
+  ThoiGianTao     DateTime?       @default(now()) @db.DateTime(0)
+  TrangThai       Boolean?        @default(true)
+  DaXoa           Boolean?        @default(false)
+  thongbao        thongbao        @relation(fields: [MaThongBao], references: [MaThongBao], onDelete: NoAction, onUpdate: NoAction, map: "dinhkemthongbao_ibfk_1")
+  tainguyenluutru tainguyenluutru @relation(fields: [MaTaiNguyen], references: [MaTaiNguyen], onDelete: NoAction, onUpdate: NoAction, map: "dinhkemthongbao_ibfk_2")
+
+  @@id([MaThongBao, MaTaiNguyen])
+  @@index([MaTaiNguyen, DaXoa, TrangThai], map: "idx_DinhKemThongBao_TaiNguyen_Active")
+}
+
+model giangvien {
+  MaGiangVien        String            @id @db.Char(36)
+  MaNguoiDung        String            @unique(map: "MaNguoiDung1") @db.Char(36)
+  SoDienThoai        String?           @db.VarChar(15)
+  QueQuan            String?           @db.VarChar(255)
+  TrinhDoChuyenMon   String            @db.VarChar(255)
+  HocVi              String?           @db.VarChar(100)
+  KinhNghiemGiangDay String?           @db.Text
+  NguoiTao           String?           @db.Char(36)
+  ThoiGianTao        DateTime?         @default(now()) @db.DateTime(0)
+  NguoiSua           String?           @db.Char(36)
+  ThoiGianSua        DateTime?         @db.DateTime(0)
+  TrangThai          Boolean?          @default(true)
+  DaXoa              Boolean?          @default(false)
+  nguoidung          nguoidung         @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "giangvien_ibfk_1")
+  giangvienlophoc    giangvienlophoc[]
+  yeucaulichday      yeucaulichday[]
+}
+
+model giangvienkhoahoc {
+  MaGiangVien String    @db.Char(36)
+  MaKhoaHoc   String    @db.Char(36)
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+
+  @@id([MaGiangVien, MaKhoaHoc])
+  @@index([MaKhoaHoc], map: "IX_giangvienkhoahoc_MaKhoaHoc")
+}
+
+model giangvienlophoc {
+  MaLopHoc    String    @db.Char(36)
+  MaGiangVien String    @db.Char(36)
+  LoaiVaiTro  Int?      @default(1) @db.TinyInt
+  NgayThamGia DateTime? @db.Date
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  lophoc      lophoc    @relation(fields: [MaLopHoc], references: [MaLopHoc], onDelete: NoAction, onUpdate: NoAction, map: "giangvienlophoc_ibfk_1")
+  giangvien   giangvien @relation(fields: [MaGiangVien], references: [MaGiangVien], onDelete: NoAction, onUpdate: NoAction, map: "giangvienlophoc_ibfk_2")
+
+  @@id([MaLopHoc, MaGiangVien])
+  @@index([MaGiangVien, DaXoa, TrangThai], map: "idx_GiangVienLopHoc_GiangVien_Active")
+}
+
+model hocsinh {
+  MaHocSinh            String             @id @db.Char(36)
+  MaNguoiDung          String             @unique(map: "MaNguoiDung2") @db.Char(36)
+  NgaySinh             DateTime?          @db.Date
+  QueQuan              String?            @db.VarChar(255)
+  SoDienThoaiNguoiThan String?            @db.VarChar(15)
+  TruongDangTheoHoc    String?            @db.VarChar(255)
+  NguoiTao             String?            @db.Char(36)
+  ThoiGianTao          DateTime?          @default(now()) @db.DateTime(0)
+  NguoiSua             String?            @db.Char(36)
+  ThoiGianSua          DateTime?          @db.DateTime(0)
+  TrangThai            Boolean?           @default(true)
+  DaXoa                Boolean?           @default(false)
+  diemdanh             diemdanh[]
+  nguoidung            nguoidung          @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "hocsinh_ibfk_1")
+  hocsinhlophoc        hocsinhlophoc[]
+  nguoinhansukien      nguoinhansukien[]
+  nhanxettienboai3     nhanxettienboai3[]
+  nopbai               nopbai[]
+  phuhuynhhocsinh      phuhuynhhocsinh[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model hocsinhlophoc {
+  MaLopHoc       String          @db.Char(36)
+  MaHocSinh      String          @db.Char(36)
+  MaTrangThai    Int?
+  NgayThamGia    DateTime?       @db.Date
+  NgayRoiLop     DateTime?       @db.Date
+  NguoiTao       String?         @db.Char(36)
+  ThoiGianTao    DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua       String?         @db.Char(36)
+  ThoiGianSua    DateTime?       @db.DateTime(0)
+  TrangThai      Boolean?        @default(true)
+  DaXoa          Boolean?        @default(false)
+  lophoc         lophoc          @relation(fields: [MaLopHoc], references: [MaLopHoc], onDelete: NoAction, onUpdate: NoAction, map: "hocsinhlophoc_ibfk_1")
+  hocsinh        hocsinh         @relation(fields: [MaHocSinh], references: [MaHocSinh], onDelete: NoAction, onUpdate: NoAction, map: "hocsinhlophoc_ibfk_2")
+  chitietdanhmuc chitietdanhmuc? @relation(fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "hocsinhlophoc_ibfk_3")
+
+  @@id([MaLopHoc, MaHocSinh])
+  @@index([MaTrangThai], map: "MaTrangThai1")
+  @@index([MaHocSinh, DaXoa, TrangThai], map: "idx_HocSinhLopHoc_HocSinh_Active")
+}
+
+model hoithoai {
+  MaHoiThoai        String              @id @db.Char(36)
+  TieuDe            String?             @db.VarChar(255)
+  NguoiTao          String?             @db.Char(36)
+  ThoiGianTao       DateTime?           @default(now()) @db.DateTime(0)
+  NguoiSua          String?             @db.Char(36)
+  ThoiGianSua       DateTime?           @db.DateTime(0)
+  TrangThai         Boolean?            @default(true)
+  DaXoa             Boolean?            @default(false)
+  thanhvienhoithoai thanhvienhoithoai[]
+  tinnhan           tinnhan[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model khoahoc {
+  MaKhoaHoc             String                  @id @db.Char(36)
+  TenKhoaHoc            String                  @db.VarChar(255)
+  MoTa                  String?                 @db.Text
+  GiaCoBan              Decimal?                @db.Decimal(14, 2)
+  MaTrangThai           Int?
+  NguoiTao              String?                 @db.Char(36)
+  ThoiGianTao           DateTime?               @default(now()) @db.DateTime(0)
+  NguoiSua              String?                 @db.Char(36)
+  ThoiGianSua           DateTime?               @db.DateTime(0)
+  TrangThai             Boolean?                @default(true)
+  DaXoa                 Boolean?                @default(false)
+  baitap                baitap[]
+  chitietkhoahoc_lophoc chitietkhoahoc_lophoc[]
+  chuonghoc             chuonghoc[]
+  chitietdanhmuc        chitietdanhmuc?         @relation(fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "khoahoc_ibfk_1")
+  nganhangcauhoi        nganhangcauhoi[]
+  nganhangde            nganhangde[]
+  nhanxettienboai3      nhanxettienboai3[]
+
+  @@index([MaTrangThai], map: "MaTrangThai2")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lophoc {
+  MaLopHoc              String                  @id @db.Char(36)
+  TenLop                String                  @db.VarChar(100)
+  NgayBatDau            DateTime?               @db.Date
+  NgayKetThuc           DateTime?               @db.Date
+  SiSoHienTai           Int?                    @default(0)
+  SiSoToiDa             Int?
+  MaTrangThai           Int?
+  NguoiTao              String?                 @db.Char(36)
+  ThoiGianTao           DateTime?               @default(now()) @db.DateTime(0)
+  NguoiSua              String?                 @db.Char(36)
+  ThoiGianSua           DateTime?               @db.DateTime(0)
+  TrangThai             Boolean?                @default(true)
+  DaXoa                 Boolean?                @default(false)
+  buoihoc               buoihoc[]
+  chitietkhoahoc_lophoc chitietkhoahoc_lophoc[]
+  giangvienlophoc       giangvienlophoc[]
+  hocsinhlophoc         hocsinhlophoc[]
+  chitietdanhmuc        chitietdanhmuc?         @relation(fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "lophoc_ibfk_1")
+  sukienlophoc          sukienlophoc[]
+  yeucaulichday         yeucaulichday[]
+
+  @@index([MaTrangThai], map: "MaTrangThai3")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nganhangcauhoi {
+  MaCauHoi                                                 String             @id @db.Char(36)
+  MaKhoaHoc                                                String             @db.Char(36)
+  LoaiCauHoi                                               Int?
+  MucDo                                                    Int?
+  NguoiTao                                                 String?            @db.Char(36)
+  ThoiGianTao                                              DateTime?          @default(now()) @db.DateTime(0)
+  NguoiSua                                                 String?            @db.Char(36)
+  ThoiGianSua                                              DateTime?          @db.DateTime(0)
+  TrangThai                                                Boolean?           @default(true)
+  DaXoa                                                    Boolean?           @default(false)
+  AmThanhLink                                              String?            @db.VarChar(255)
+  HinhAnhLink                                              String?            @db.VarChar(255)
+  MaCauHoiCha                                              String?            @db.Char(36)
+  ThuTu                                                    Int?               @default(0)
+  TrinhDo                                                  Int?
+  KyNang                                                   Int?
+  NoiDungChiTiet                                           Json?
+  dapandiendkhuyet                                         dapandiendkhuyet[]
+  khoahoc                                                  khoahoc            @relation(fields: [MaKhoaHoc], references: [MaKhoaHoc], onDelete: NoAction, onUpdate: NoAction, map: "nganhangcauhoi_ibfk_1")
+  chitietdanhmuc_nganhangcauhoi_LoaiCauHoiTochitietdanhmuc chitietdanhmuc?    @relation("nganhangcauhoi_LoaiCauHoiTochitietdanhmuc", fields: [LoaiCauHoi], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "nganhangcauhoi_ibfk_2")
+  chitietdanhmuc_nganhangcauhoi_MucDoTochitietdanhmuc      chitietdanhmuc?    @relation("nganhangcauhoi_MucDoTochitietdanhmuc", fields: [MucDo], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "nganhangcauhoi_ibfk_3")
+  nganhangcauhoi                                           nganhangcauhoi?    @relation("nganhangcauhoiTonganhangcauhoi", fields: [MaCauHoiCha], references: [MaCauHoi], onDelete: NoAction, onUpdate: NoAction, map: "nganhangcauhoi_ibfk_4")
+  other_nganhangcauhoi                                     nganhangcauhoi[]   @relation("nganhangcauhoiTonganhangcauhoi")
+
+  @@index([LoaiCauHoi], map: "LoaiCauHoi")
+  @@index([MaCauHoiCha], map: "MaCauHoiCha")
+  @@index([MaKhoaHoc], map: "MaKhoaHoc2")
+  @@index([MucDo], map: "MucDo")
+  @@index([TrinhDo, KyNang], map: "idx_nhcq_filter")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nganhangde {
+  MaNganHang                                        String          @id @db.Char(36)
+  MaKhoaHoc                                         String?         @db.Char(36)
+  MaCode                                            String          @unique(map: "uq_nganhangde_ma_code") @db.VarChar(50)
+  TenNganHang                                       String          @db.VarChar(255)
+  TrinhDo                                           Int?
+  MucDo                                             Int?
+  KyNang                                            Int?
+  Unit                                              String?         @db.VarChar(255)
+  MoTa                                              String?         @db.Text
+  TrangThai                                         String          @default("DRAFT") @db.VarChar(30)
+  NguoiTao                                          String?         @db.Char(36)
+  ThoiGianTao                                       DateTime?       @db.DateTime(0)
+  NguoiSua                                          String?         @db.Char(36)
+  ThoiGianSua                                       DateTime?       @db.DateTime(0)
+  DaXoa                                             Boolean         @default(false)
+  baitap                                            baitap[]
+  khoahoc                                           khoahoc?        @relation(fields: [MaKhoaHoc], references: [MaKhoaHoc], onUpdate: NoAction, map: "fk_nganhangde_khoahoc")
+  chitietdanhmuc_nganhangde_KyNangTochitietdanhmuc  chitietdanhmuc? @relation("nganhangde_KyNangTochitietdanhmuc", fields: [KyNang], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "fk_nganhangde_kynang")
+  chitietdanhmuc_nganhangde_MucDoTochitietdanhmuc   chitietdanhmuc? @relation("nganhangde_MucDoTochitietdanhmuc", fields: [MucDo], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "fk_nganhangde_mucdo")
+  chitietdanhmuc_nganhangde_TrinhDoTochitietdanhmuc chitietdanhmuc? @relation("nganhangde_TrinhDoTochitietdanhmuc", fields: [TrinhDo], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "fk_nganhangde_trinhdo")
+
+  @@index([KyNang], map: "fk_nganhangde_kynang")
+  @@index([MucDo], map: "fk_nganhangde_mucdo")
+  @@index([TrinhDo], map: "fk_nganhangde_trinhdo")
+  @@index([MaKhoaHoc], map: "idx_nganhangde_khoa_hoc")
+  @@index([TrangThai], map: "idx_nganhangde_trang_thai")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nguoidung {
+  MaNguoiDung       String              @id @db.Char(36)
+  LoaiTaiKhoan      Int                 @db.TinyInt
+  TenDangNhap       String              @unique(map: "TenDangNhap") @db.VarChar(50)
+  MatKhauHash       String              @db.VarChar(255)
+  HoTen             String              @db.VarChar(100)
+  Email             String?             @unique(map: "Email") @db.VarChar(100)
+  AnhDaiDien        String?             @db.VarChar(255)
+  MaTrangThai       Int?
+  TokenXacMinh      String?             @db.VarChar(255)
+  DaXacMinhEmail    Boolean?            @default(false)
+  NguoiTao          String?             @db.Char(36)
+  ThoiGianTao       DateTime?           @default(now()) @db.DateTime(0)
+  NguoiSua          String?             @db.Char(36)
+  ThoiGianSua       DateTime?           @db.DateTime(0)
+  TrangThai         Boolean?            @default(true)
+  DaXoa             Boolean?            @default(false)
+  LanCuoiDangNhap   DateTime?           @db.DateTime(6)
+  binhluan          binhluan[]
+  giangvien         giangvien?
+  hocsinh           hocsinh?
+  chitietdanhmuc    chitietdanhmuc?     @relation(fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "nguoidung_ibfk_1")
+  nguoidungvaitro   nguoidungvaitro[]
+  nguoinhanthongbao nguoinhanthongbao[]
+  phuhuynh          phuhuynh?
+  sukienlophoc      sukienlophoc[]
+  tainguyenluutru   tainguyenluutru[]
+  thanhvienhoithoai thanhvienhoithoai[]
+  tinnhan           tinnhan[]
+
+  @@index([MaTrangThai], map: "MaTrangThai4")
+}
+
+model nguoidungvaitro {
+  MaNguoiDung String    @db.Char(36)
+  MaVaiTro    Int
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  nguoidung   nguoidung @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "nguoidungvaitro_ibfk_1")
+  vaitro      vaitro    @relation(fields: [MaVaiTro], references: [MaVaiTro], onDelete: NoAction, onUpdate: NoAction, map: "nguoidungvaitro_ibfk_2")
+
+  @@id([MaNguoiDung, MaVaiTro])
+  @@index([MaVaiTro, DaXoa, TrangThai], map: "idx_NguoiDungVaiTro_VaiTro_Active")
+}
+
+model nguoinhansukien {
+  MaSuKien     String       @db.Char(36)
+  MaHocSinh    String       @db.Char(36)
+  NguoiTao     String?      @db.Char(36)
+  ThoiGianTao  DateTime?    @default(now()) @db.DateTime(0)
+  NguoiSua     String?      @db.Char(36)
+  ThoiGianSua  DateTime?    @db.DateTime(0)
+  TrangThai    Boolean?     @default(true)
+  DaXoa        Boolean?     @default(false)
+  sukienlophoc sukienlophoc @relation(fields: [MaSuKien], references: [MaSuKien], onDelete: NoAction, onUpdate: NoAction, map: "nguoinhansukien_ibfk_1")
+  hocsinh      hocsinh      @relation(fields: [MaHocSinh], references: [MaHocSinh], onDelete: NoAction, onUpdate: NoAction, map: "nguoinhansukien_ibfk_2")
+
+  @@id([MaSuKien, MaHocSinh])
+  @@index([MaHocSinh, DaXoa, TrangThai], map: "idx_NguoiNhanSuKien_HocSinh_Active")
+}
+
+model nguoinhanthongbao {
+  MaThongBao  String    @db.Char(36)
+  MaNguoiDung String    @db.Char(36)
+  DaDoc       Boolean?  @default(false)
+  NgayDoc     DateTime? @db.DateTime(0)
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  thongbao    thongbao  @relation(fields: [MaThongBao], references: [MaThongBao], onDelete: NoAction, onUpdate: NoAction, map: "nguoinhanthongbao_ibfk_1")
+  nguoidung   nguoidung @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "nguoinhanthongbao_ibfk_2")
+
+  @@id([MaThongBao, MaNguoiDung])
+  @@index([MaNguoiDung, DaDoc, DaXoa], map: "idx_NguoiNhanThongBao_User_DaDoc")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nhanxetbaitapai1 {
+  MaNhanXet        String    @id @db.Char(36)
+  MaNopBai         String    @db.Char(36)
+  MaBaiTapGoc      String?   @db.Char(36)
+  TenBaiTapGoc     String?   @db.VarChar(255)
+  SoCauDung        Int?
+  SoCauTong        Int?
+  NoiDungNhanXet   String?   @db.Text
+  ChiTietCauHoi    String?   @db.LongText
+  DiemTuLuanAiCham Decimal?  @db.Decimal(5, 2)
+  TrangThai        String    @default("PENDING") @db.VarChar(20)
+  ThongBaoLoi      String?   @db.Text
+  NguoiTao         String?   @db.Char(36)
+  ThoiGianTao      DateTime? @db.DateTime(0)
+  ThoiGianXong     DateTime? @db.DateTime(0)
+  nopbai           nopbai    @relation(fields: [MaNopBai], references: [MaNopBai], onDelete: Cascade, onUpdate: NoAction, map: "fk_nhanxetbaitapai1_nopbai")
+
+  @@index([MaNopBai], map: "idx_nhanxetbaitapai1_nopbai")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nhanxetdekiemtraai2 {
+  MaNhanXet      String    @id @db.Char(36)
+  MaNopBai       String    @unique(map: "uq_nhanxetdekiemtraai2_nopbai") @db.Char(36)
+  NoiDungNhanXet String?   @db.Text
+  XepLoai        String?   @db.VarChar(30)
+  TrangThai      String    @default("PENDING") @db.VarChar(20)
+  ThongBaoLoi    String?   @db.Text
+  ThoiGianTao    DateTime? @db.DateTime(0)
+  ThoiGianXong   DateTime? @db.DateTime(0)
+  nopbai         nopbai    @relation(fields: [MaNopBai], references: [MaNopBai], onDelete: Cascade, onUpdate: NoAction, map: "fk_nhanxetdekiemtraai2_nopbai")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nhanxettienboai3 {
+  MaNhanXet            String    @id @db.Char(36)
+  MaHocSinh            String    @db.Char(36)
+  MaKhoaHoc            String    @db.Char(36)
+  DanhSachNopBaiSoSanh Json?
+  NoiDungNhanXet       String?   @db.Text
+  TrangThai            String    @default("PENDING") @db.VarChar(20)
+  ThongBaoLoi          String?   @db.Text
+  ThoiGianTao          DateTime? @db.DateTime(0)
+  ThoiGianXong         DateTime? @db.DateTime(0)
+  hocsinh              hocsinh   @relation(fields: [MaHocSinh], references: [MaHocSinh], onDelete: Cascade, onUpdate: NoAction, map: "fk_nhanxettienboai3_hocsinh")
+  khoahoc              khoahoc   @relation(fields: [MaKhoaHoc], references: [MaKhoaHoc], onDelete: Cascade, onUpdate: NoAction, map: "fk_nhanxettienboai3_khoahoc")
+
+  @@index([MaKhoaHoc], map: "fk_nhanxettienboai3_khoahoc")
+  @@index([MaHocSinh, MaKhoaHoc], map: "idx_nhanxettienboai3_hocsinh_khoahoc")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nhomdanhmuc {
+  MaNhom         Int              @id @default(autoincrement())
+  MaCode         String           @unique(map: "MaCode") @db.VarChar(50)
+  TenNhom        String           @db.VarChar(255)
+  GhiChu         String?          @db.Text
+  NguoiTao       String?          @db.Char(36)
+  ThoiGianTao    DateTime?        @default(now()) @db.DateTime(0)
+  NguoiSua       String?          @db.Char(36)
+  ThoiGianSua    DateTime?        @db.DateTime(0)
+  TrangThai      Boolean?         @default(true)
+  DaXoa          Boolean?         @default(false)
+  chitietdanhmuc chitietdanhmuc[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model nopbai {
+  MaNopBai            String               @id @db.Char(36)
+  MaSuKien            String               @db.Char(36)
+  MaHocSinh           String               @db.Char(36)
+  ThoiGianBatDau      DateTime?            @db.DateTime(0)
+  ThoiGianNop         DateTime?            @db.DateTime(0)
+  NhanXetGiaoVien     String?              @db.Text
+  DiemSo              Decimal?             @db.Decimal(5, 2)
+  LanNop              Int?                 @default(1)
+  MaTrangThai         Int?
+  NguoiTao            String?              @db.Char(36)
+  ThoiGianTao         DateTime?            @default(now()) @db.DateTime(0)
+  NguoiSua            String?              @db.Char(36)
+  ThoiGianSua         DateTime?            @db.DateTime(0)
+  TrangThai           Boolean?             @default(true)
+  DaXoa               Boolean?             @default(false)
+  ThoiGianThucTe      Int?
+  TrangThaiChamBai    Int?
+  cauhoiluutu         cauhoiluutu[]
+  chitietnopbai       chitietnopbai[]
+  dinhkemnopbai       dinhkemnopbai[]
+  nhanxetbaitapai1    nhanxetbaitapai1[]
+  nhanxetdekiemtraai2 nhanxetdekiemtraai2?
+  sukienlophoc        sukienlophoc         @relation(fields: [MaSuKien], references: [MaSuKien], onDelete: NoAction, onUpdate: NoAction, map: "nopbai_ibfk_1")
+  hocsinh             hocsinh              @relation(fields: [MaHocSinh], references: [MaHocSinh], onDelete: NoAction, onUpdate: NoAction, map: "nopbai_ibfk_2")
+  chitietdanhmuc      chitietdanhmuc?      @relation(fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "nopbai_ibfk_3")
+
+  @@index([MaHocSinh], map: "MaHocSinh")
+  @@index([MaSuKien], map: "MaSuKien1")
+  @@index([MaTrangThai], map: "MaTrangThai5")
+  @@index([MaSuKien, MaHocSinh], map: "idx_nopbai_sukien_hocsinh")
+  @@index([TrangThaiChamBai], map: "idx_nopbai_trang_thai_cham")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model phonghoc {
+  MaPhongHoc     String          @id @db.Char(36)
+  TenPhong       String          @db.VarChar(50)
+  SucChua        Int?
+  LoaiPhong      Int?
+  Link           String?         @db.VarChar(255)
+  NguoiTao       String?         @db.Char(36)
+  ThoiGianTao    DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua       String?         @db.Char(36)
+  ThoiGianSua    DateTime?       @db.DateTime(0)
+  TrangThai      Boolean?        @default(true)
+  DaXoa          Boolean?        @default(false)
+  buoihoc        buoihoc[]
+  chitietdanhmuc chitietdanhmuc? @relation(fields: [LoaiPhong], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "phonghoc_ibfk_1")
+  yeucaulichday  yeucaulichday[]
+
+  @@index([LoaiPhong], map: "LoaiPhong")
+}
+
+model phuhuynh {
+  MaPhuHuynh      String            @id @db.Char(36)
+  MaNguoiDung     String            @unique(map: "MaNguoiDung3") @db.Char(36)
+  SoDienThoai     String            @db.VarChar(15)
+  DiaChiLienHe    String?           @db.Text
+  NgheNghiep      String?           @db.VarChar(255)
+  NguoiTao        String?           @db.Char(36)
+  ThoiGianTao     DateTime?         @default(now()) @db.DateTime(0)
+  NguoiSua        String?           @db.Char(36)
+  ThoiGianSua     DateTime?         @db.DateTime(0)
+  TrangThai       Boolean?          @default(true)
+  DaXoa           Boolean?          @default(false)
+  nguoidung       nguoidung         @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "phuhuynh_ibfk_1")
+  phuhuynhhocsinh phuhuynhhocsinh[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model phuhuynhhocsinh {
+  MaPhuHuynh     String          @db.Char(36)
+  MaHocSinh      String          @db.Char(36)
+  MaQuanHe       Int?
+  NguoiTao       String?         @db.Char(36)
+  ThoiGianTao    DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua       String?         @db.Char(36)
+  ThoiGianSua    DateTime?       @db.DateTime(0)
+  TrangThai      Boolean?        @default(true)
+  DaXoa          Boolean?        @default(false)
+  phuhuynh       phuhuynh        @relation(fields: [MaPhuHuynh], references: [MaPhuHuynh], onDelete: NoAction, onUpdate: NoAction, map: "phuhuynhhocsinh_ibfk_1")
+  hocsinh        hocsinh         @relation(fields: [MaHocSinh], references: [MaHocSinh], onDelete: NoAction, onUpdate: NoAction, map: "phuhuynhhocsinh_ibfk_2")
+  chitietdanhmuc chitietdanhmuc? @relation(fields: [MaQuanHe], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "phuhuynhhocsinh_ibfk_3")
+
+  @@id([MaPhuHuynh, MaHocSinh])
+  @@index([MaQuanHe], map: "MaQuanHe")
+  @@index([MaHocSinh, DaXoa, TrangThai], map: "idx_PhuHuynhHocSinh_HocSinh_Active")
+}
+
+model quyen {
+  MaQuyen     Int           @id @default(autoincrement())
+  MaChucNang  Int
+  TenQuyen    String        @db.VarChar(100)
+  MoTa        String?       @db.VarChar(255)
+  NguoiTao    String?       @db.Char(36)
+  ThoiGianTao DateTime?     @default(now()) @db.DateTime(0)
+  NguoiSua    String?       @db.Char(36)
+  ThoiGianSua DateTime?     @db.DateTime(0)
+  TrangThai   Boolean?      @default(true)
+  DaXoa       Boolean?      @default(false)
+  chucnang    chucnang      @relation(fields: [MaChucNang], references: [MaChucNang], onDelete: NoAction, onUpdate: NoAction, map: "quyen_ibfk_1")
+  vaitroquyen vaitroquyen[]
+
+  @@index([MaChucNang], map: "MaChucNang")
+}
+
+model refresh_sessions {
+  SessionId    String    @id @db.VarChar(32)
+  UserId       String    @db.Char(36)
+  RefreshToken String    @db.VarChar(512)
+  ExpiresAtUtc DateTime  @db.DateTime(6)
+  CreatedAtUtc DateTime  @db.DateTime(6)
+  UpdatedAtUtc DateTime? @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model sukienlophoc {
+  MaSuKien                                                String            @id @db.Char(36)
+  MaLopHoc                                                String            @db.Char(36)
+  MaNguoiDung                                             String            @db.Char(36)
+  DangSuKien                                              Int?
+  MaBaiTap                                                String?           @db.Char(36)
+  NoiDung                                                 String?           @db.Text
+  HanNop                                                  DateTime?         @db.DateTime(0)
+  MaTrangThai                                             Int?
+  NguoiTao                                                String?           @db.Char(36)
+  ThoiGianTao                                             DateTime?         @default(now()) @db.DateTime(0)
+  NguoiSua                                                String?           @db.Char(36)
+  ThoiGianSua                                             DateTime?         @db.DateTime(0)
+  TrangThai                                               Boolean?          @default(true)
+  DaXoa                                                   Boolean?          @default(false)
+  binhluan                                                binhluan[]
+  dinhkem                                                 dinhkem[]
+  nguoinhansukien                                         nguoinhansukien[]
+  nopbai                                                  nopbai[]
+  lophoc                                                  lophoc            @relation(fields: [MaLopHoc], references: [MaLopHoc], onDelete: NoAction, onUpdate: NoAction, map: "sukienlophoc_ibfk_1")
+  nguoidung                                               nguoidung         @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "sukienlophoc_ibfk_2")
+  chitietdanhmuc_sukienlophoc_DangSuKienTochitietdanhmuc  chitietdanhmuc?   @relation("sukienlophoc_DangSuKienTochitietdanhmuc", fields: [DangSuKien], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "sukienlophoc_ibfk_3")
+  baitap                                                  baitap?           @relation(fields: [MaBaiTap], references: [MaBaiTap], onDelete: NoAction, onUpdate: NoAction, map: "sukienlophoc_ibfk_4")
+  chitietdanhmuc_sukienlophoc_MaTrangThaiTochitietdanhmuc chitietdanhmuc?   @relation("sukienlophoc_MaTrangThaiTochitietdanhmuc", fields: [MaTrangThai], references: [MaChiTiet], onDelete: NoAction, onUpdate: NoAction, map: "sukienlophoc_ibfk_5")
+
+  @@index([DangSuKien], map: "DangSuKien")
+  @@index([MaBaiTap], map: "MaBaiTap")
+  @@index([MaLopHoc], map: "MaLopHoc1")
+  @@index([MaNguoiDung], map: "MaNguoiDung4")
+  @@index([MaTrangThai], map: "MaTrangThai6")
+}
+
+model tailieu {
+  MaTaiLieu   String    @id @db.Char(36)
+  MaChuongHoc String    @db.Char(36)
+  TenTaiLieu  String    @db.VarChar(255)
+  LinkTaiLieu String?   @db.VarChar(255)
+  MoTa        String?   @db.Text
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  chuonghoc   chuonghoc @relation(fields: [MaChuongHoc], references: [MaChuong], onDelete: NoAction, onUpdate: NoAction, map: "tailieu_ibfk_1")
+
+  @@index([MaChuongHoc], map: "MaChuongHoc")
+}
+
+model tainguyenluutru {
+  MaTaiNguyen     String            @id @db.Char(36)
+  MaNguoiDung     String            @db.Char(36)
+  TenTaiNguyen    String            @db.VarChar(255)
+  Link            String            @db.VarChar(255)
+  NguoiTao        String?           @db.Char(36)
+  ThoiGianTao     DateTime?         @default(now()) @db.DateTime(0)
+  NguoiSua        String?           @db.Char(36)
+  ThoiGianSua     DateTime?         @db.DateTime(0)
+  TrangThai       Boolean?          @default(true)
+  DaXoa           Boolean?          @default(false)
+  dinhkem         dinhkem[]
+  dinhkemnopbai   dinhkemnopbai[]
+  dinhkemthongbao dinhkemthongbao[]
+  nguoidung       nguoidung         @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "tainguyenluutru_ibfk_1")
+
+  @@index([MaNguoiDung], map: "MaNguoiDung5")
+}
+
+model thanhvienhoithoai {
+  MaHoiThoai  String    @db.Char(36)
+  MaNguoiDung String    @db.Char(36)
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  hoithoai    hoithoai  @relation(fields: [MaHoiThoai], references: [MaHoiThoai], onDelete: NoAction, onUpdate: NoAction, map: "thanhvienhoithoai_ibfk_1")
+  nguoidung   nguoidung @relation(fields: [MaNguoiDung], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "thanhvienhoithoai_ibfk_2")
+
+  @@id([MaHoiThoai, MaNguoiDung])
+  @@index([MaNguoiDung, DaXoa, TrangThai], map: "idx_ThanhVienHoiThoai_User_Active")
+}
+
+model thongbao {
+  MaThongBao        String              @id @db.Char(36)
+  TieuDe            String              @db.VarChar(255)
+  NoiDung           String              @db.Text
+  NguoiTao          String?             @db.Char(36)
+  ThoiGianTao       DateTime?           @default(now()) @db.DateTime(0)
+  NguoiSua          String?             @db.Char(36)
+  ThoiGianSua       DateTime?           @db.DateTime(0)
+  TrangThai         Boolean?            @default(true)
+  DaXoa             Boolean?            @default(false)
+  DoiTuong          String              @default(dbgenerated("(_utf8mb4\\'Tat_Ca\\')")) @db.LongText
+  dinhkemthongbao   dinhkemthongbao[]
+  nguoinhanthongbao nguoinhanthongbao[]
+}
+
+model tiethoc {
+  MaTiet                                                   Int             @id @default(autoincrement())
+  TenTiet                                                  String          @db.VarChar(50)
+  GioBatDau                                                DateTime        @db.Time(0)
+  GioKetThuc                                               DateTime        @db.Time(0)
+  NguoiTao                                                 String?         @db.Char(36)
+  ThoiGianTao                                              DateTime?       @default(now()) @db.DateTime(0)
+  NguoiSua                                                 String?         @db.Char(36)
+  ThoiGianSua                                              DateTime?       @db.DateTime(0)
+  TrangThai                                                Boolean?        @default(true)
+  DaXoa                                                    Boolean?        @default(false)
+  buoihoc_buoihoc_MaTietBatDauTotiethoc                    buoihoc[]       @relation("buoihoc_MaTietBatDauTotiethoc")
+  buoihoc_buoihoc_MaTietKetThucTotiethoc                   buoihoc[]       @relation("buoihoc_MaTietKetThucTotiethoc")
+  yeucaulichday_yeucaulichday_MaTietBatDauDeXuatTotiethoc  yeucaulichday[] @relation("yeucaulichday_MaTietBatDauDeXuatTotiethoc")
+  yeucaulichday_yeucaulichday_MaTietKetThucDeXuatTotiethoc yeucaulichday[] @relation("yeucaulichday_MaTietKetThucDeXuatTotiethoc")
+}
+
+model tinnhan {
+  MaTinNhan      String    @id @db.Char(36)
+  MaHoiThoai     String    @db.Char(36)
+  MaNguoiDungGui String    @db.Char(36)
+  NoiDung        String    @db.Text
+  DaDoc          Boolean?  @default(false)
+  NguoiTao       String?   @db.Char(36)
+  ThoiGianTao    DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua       String?   @db.Char(36)
+  ThoiGianSua    DateTime? @db.DateTime(0)
+  TrangThai      Boolean?  @default(true)
+  DaXoa          Boolean?  @default(false)
+  hoithoai       hoithoai  @relation(fields: [MaHoiThoai], references: [MaHoiThoai], onDelete: NoAction, onUpdate: NoAction, map: "tinnhan_ibfk_1")
+  nguoidung      nguoidung @relation(fields: [MaNguoiDungGui], references: [MaNguoiDung], onDelete: NoAction, onUpdate: NoAction, map: "tinnhan_ibfk_2")
+
+  @@index([MaHoiThoai], map: "MaHoiThoai")
+  @@index([MaNguoiDungGui], map: "MaNguoiDungGui")
+}
+
+model vaitro {
+  MaVaiTro        Int               @id @default(autoincrement())
+  TenVaiTro       String            @db.VarChar(50)
+  NguoiTao        String?           @db.Char(36)
+  ThoiGianTao     DateTime?         @default(now()) @db.DateTime(0)
+  NguoiSua        String?           @db.Char(36)
+  ThoiGianSua     DateTime?         @db.DateTime(0)
+  TrangThai       Boolean?          @default(true)
+  DaXoa           Boolean?          @default(false)
+  nguoidungvaitro nguoidungvaitro[]
+  vaitrochucnang  vaitrochucnang[]
+  vaitroquyen     vaitroquyen[]
+}
+
+model vaitrochucnang {
+  maVaiTro        Int
+  maChucNang      Int
+  chucnanghethong chucnanghethong @relation(fields: [maChucNang], references: [maChucNang], onDelete: Cascade, onUpdate: NoAction, map: "fk_vtc_chucnang")
+  vaitro          vaitro          @relation(fields: [maVaiTro], references: [MaVaiTro], onDelete: Cascade, onUpdate: NoAction, map: "fk_vtc_vaitro")
+
+  @@id([maVaiTro, maChucNang])
+  @@index([maChucNang], map: "fk_vtc_chucnang")
+}
+
+model vaitroquyen {
+  MaVaiTro    Int
+  MaQuyen     Int
+  NguoiTao    String?   @db.Char(36)
+  ThoiGianTao DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua    String?   @db.Char(36)
+  ThoiGianSua DateTime? @db.DateTime(0)
+  TrangThai   Boolean?  @default(true)
+  DaXoa       Boolean?  @default(false)
+  vaitro      vaitro    @relation(fields: [MaVaiTro], references: [MaVaiTro], onDelete: NoAction, onUpdate: NoAction, map: "vaitroquyen_ibfk_1")
+  quyen       quyen     @relation(fields: [MaQuyen], references: [MaQuyen], onDelete: NoAction, onUpdate: NoAction, map: "vaitroquyen_ibfk_2")
+
+  @@id([MaVaiTro, MaQuyen])
+  @@index([MaQuyen, DaXoa, TrangThai], map: "idx_VaiTroQuyen_Quyen_Active")
+}
+
+model yeucaulichday {
+  MaYeuCau                                           String    @id @db.Char(36)
+  MaGiangVien                                        String    @db.Char(36)
+  MaLopHoc                                           String    @db.Char(36)
+  MaBuoiHoc                                          String?   @db.Char(36)
+  NgayHocDeXuat                                      DateTime  @db.Date
+  MaTietBatDauDeXuat                                 Int
+  MaTietKetThucDeXuat                                Int
+  LyDo                                               String?   @db.Text
+  TrangThaiDuyet                                     Int?      @default(0) @db.TinyInt
+  NguoiTao                                           String?   @db.Char(36)
+  ThoiGianTao                                        DateTime? @default(now()) @db.DateTime(0)
+  NguoiSua                                           String?   @db.Char(36)
+  ThoiGianSua                                        DateTime? @db.DateTime(0)
+  TrangThai                                          Boolean?  @default(true)
+  DaXoa                                              Boolean?  @default(false)
+  GhiChuAdmin                                        String?   @db.LongText
+  LoaiYeuCau                                         Int?      @db.TinyInt
+  MaPhongHocDeXuat                                   String?   @db.Char(36)
+  phonghoc                                           phonghoc? @relation(fields: [MaPhongHocDeXuat], references: [MaPhongHoc], onDelete: NoAction, onUpdate: NoAction, map: "FK_yeucaulichday_phonghoc_MaPhongHocDeXuat")
+  giangvien                                          giangvien @relation(fields: [MaGiangVien], references: [MaGiangVien], onDelete: NoAction, onUpdate: NoAction, map: "yeucaulichday_ibfk_1")
+  lophoc                                             lophoc    @relation(fields: [MaLopHoc], references: [MaLopHoc], onDelete: NoAction, onUpdate: NoAction, map: "yeucaulichday_ibfk_2")
+  buoihoc                                            buoihoc?  @relation(fields: [MaBuoiHoc], references: [MaBuoiHoc], onDelete: NoAction, onUpdate: NoAction, map: "yeucaulichday_ibfk_3")
+  tiethoc_yeucaulichday_MaTietBatDauDeXuatTotiethoc  tiethoc   @relation("yeucaulichday_MaTietBatDauDeXuatTotiethoc", fields: [MaTietBatDauDeXuat], references: [MaTiet], onDelete: NoAction, onUpdate: NoAction, map: "yeucaulichday_ibfk_4")
+  tiethoc_yeucaulichday_MaTietKetThucDeXuatTotiethoc tiethoc   @relation("yeucaulichday_MaTietKetThucDeXuatTotiethoc", fields: [MaTietKetThucDeXuat], references: [MaTiet], onDelete: NoAction, onUpdate: NoAction, map: "yeucaulichday_ibfk_5")
+
+  @@index([MaPhongHocDeXuat], map: "IX_yeucaulichday_MaPhongHocDeXuat")
+  @@index([MaBuoiHoc], map: "MaBuoiHoc")
+  @@index([MaGiangVien], map: "MaGiangVien")
+  @@index([MaLopHoc], map: "MaLopHoc2")
+  @@index([MaTietBatDauDeXuat], map: "MaTietBatDauDeXuat")
+  @@index([MaTietKetThucDeXuat], map: "MaTietKetThucDeXuat")
+}

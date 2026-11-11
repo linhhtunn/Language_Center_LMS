@@ -1,0 +1,26 @@
+# Node
+**/node_modules/
+**/dist/
+**/coverage/
+.npm/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vs/
+
+# Env (mat khau, API key) - chi commit file mau
+.env
+.env.*
+!.env.example
+!prod.env.example
+
+# Ban sao luu database
+/db_backups/
+
+# So tay van hanh rieng tu (IP VPS, tai khoan) - chi luu tren may
+*.private.md

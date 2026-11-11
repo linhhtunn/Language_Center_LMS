@@ -1,0 +1,21 @@
+# Caddy tu xin va gia han chung chi HTTPS (Let's Encrypt) cho 2 ten mien duoi day.
+# Ten mien lay tu APP_DOMAIN / API_DOMAIN trong .env.prod.
+
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy frontend:80
+
+	# Trong vai giay doi phien ban (container dang khoi dong lai), hien trang than thien
+	# thay vi loi 502 trang tron. Trang tu tai lai sau 10 giay.
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		header Retry-After "10"
+		respond `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>Đang cập nhật</title><style>body{font-family:Segoe UI,Arial,sans-serif;background:#0b3b7a;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}div{max-width:460px;padding:24px}h1{font-size:26px}p{opacity:.9;line-height:1.5}</style></head><body><div><h1>Hệ thống đang cập nhật phiên bản mới</h1><p>Vui lòng chờ trong giây lát. Trang sẽ tự tải lại sau 10 giây.</p></div></body></html>` 503
+	}
+}
+
+{$API_DOMAIN} {
+	encode gzip
+	# Gom ca /api, /socket.io (WebSocket) va /uploads.
+	reverse_proxy backend:8080
+}

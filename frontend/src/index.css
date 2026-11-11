@@ -1,0 +1,87 @@
+@import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css");
+
+/* ĐỊNH VỊ NÚT BẤM SÁT NGOÀI */
+.custom-nav-btn {
+    position: absolute;
+    top: 40%; /* Cân giữa theo chiều dọc của khối ảnh */
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.15); /* Nền trắng cực mờ */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    z-index: 100;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.custom-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: #ef7d00; /* Đổi sang màu cam Apollo khi di chuột */
+    transform: translateY(-50%) scale(1.1);
+}
+
+.btn-prev {
+    left: 10px; /* Đẩy sát về lề trái nền xanh */
+}
+
+.btn-next {
+    right: 10px; /* Đẩy sát về lề phải nền xanh */
+}
+
+/* Hiệu ứng chuyển ảnh 1.5s mượt mà */
+.carousel-item {
+    transition: transform 0.6s ease-in-out;
+}
+
+/* Make multiple selects look like single-select dropdowns visually.
+   - show a single-line box with dropdown arrow
+   - hide the list overflow until focus, where it expands to native list
+*/
+select[multiple].form-select, select[multiple].form-select-sm {
+    height: calc(1.5em + 0.75rem + 2px); /* match bootstrap select height */
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 1rem) calc(1em + 0.2rem), calc(100% - 0.6rem) calc(1em + 0.2rem);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+}
+
+/* When focused (or hovered) allow it to expand so the user can see and pick multiple options */
+select[multiple].form-select:focus, select[multiple].form-select-sm:focus {
+    height: auto;
+    overflow: auto;
+}
+
+/* Ensure selected options don't wrap the one-line appearance */
+select[multiple].form-select option {
+    white-space: normal;
+}
+
+/* Styles for custom multi-day dropdown */
+.multi-day-display {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.multi-day-display .multi-day-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.multi-day-menu {
+    min-width: 160px;
+    max-height: 220px;
+    overflow: auto;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}

@@ -1,0 +1,8 @@
+# Cac file nay chay tren VPS Linux (bash, Caddy, docker compose, source .env).
+# Luon giu xuong dong LF ke ca khi checkout tren Windows (core.autocrlf=true),
+# neu khong bash se loi "$'\r': command not found".
+*.sh                    text eol=lf
+Caddyfile               text eol=lf
+docker-compose*.yml     text eol=lf
+*.env.example           text eol=lf
+.env.example            text eol=lf

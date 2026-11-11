@@ -1,0 +1,61 @@
+# Ban chay tren MAY DEV. Ban that tren VPS dung docker-compose.prod.yml.
+#   Copy-Item .env.example .env   (dien MYSQL_ROOT_PASSWORD)
+#   docker compose up -d mysql    -> chi MySQL, cong 3307 (chay backend/frontend bang npm run dev)
+#   docker compose up -d --build  -> chay ca 3 bang Docker
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Thieu MYSQL_ROOT_PASSWORD trong file .env - xem .env.example}"
+      MYSQL_DATABASE: HeThongHocOnline_Final
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Chi chay lan dau (volume trong): tao 59 bang + du lieu khoi tao (vai tro, quyen, tai khoan demo).
+      - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: "8080"
+      DATABASE_URL: "mysql://root:${MYSQL_ROOT_PASSWORD}@mysql:3306/HeThongHocOnline_Final"
+      JWT_SECRET: "${JWT_SECRET:-local-docker-dev-only-secret-khong-dung-cho-production}"
+      ALLOWED_ORIGINS: "http://localhost:5173"
+      AI_PROVIDER: "${AI_PROVIDER:-Claude}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+    ports:
+      - "5050:8080"
+    volumes:
+      - backend_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: "http://localhost:5050"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql_data:
+  backend_uploads:
