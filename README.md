@@ -25,6 +25,7 @@ backend/     API Node.js (src/), Prisma schema (prisma/), file upload mẫu (upl
 frontend/    Giao diện React
 database/    01_schema.sql (cấu trúc bảng), 02_seed.sql (dữ liệu khởi tạo), SQL bài tập mẫu
 deploy/      Script triển khai theo phiên bản lên VPS, tự quay lui khi lỗi
+ARCHITECTURE.md          Kiến trúc và các luồng chạy chính (đăng nhập, nộp bài + AI, realtime)
 MIGRATION_CHECKLIST.md   Đối chiếu .NET → Node, khác biệt có chủ ý, lỗi của bản gốc
 backend/PORTING_GUIDE.md Quy ước viết module (giữ tương thích JSON với bản .NET)
 ```
